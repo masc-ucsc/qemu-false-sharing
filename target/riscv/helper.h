@@ -121,6 +121,11 @@ DEF_HELPER_2(cbo_clean_flush, void, env, tl)
 DEF_HELPER_2(cbo_inval, void, env, tl)
 DEF_HELPER_2(cbo_zero, void, env, tl)
 
+/* Store Buffer helpers */
+DEF_HELPER_4(sb_write, void, env, tl, tl, i32)
+DEF_HELPER_3(sb_read, tl, env, tl, i32)
+DEF_HELPER_1(sb_flush, void, env)
+
 /* Special functions */
 DEF_HELPER_2(csrr, tl, env, int)
 DEF_HELPER_3(csrw, void, env, int, tl)

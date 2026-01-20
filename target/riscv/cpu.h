@@ -261,6 +261,25 @@ struct CPUArchState {
     target_ulong excp_uw2;
     /* sw check code for sw check exception */
     target_ulong sw_check_code;
+
+#define MAX_SB_SIZE 256
+
+    typedef struct {
+        uint64_t addr;
+        uint64_t data;
+        int size;       // 1, 2, 4, 8 bytes
+    } SBEntry;
+
+    typedef struct {
+        SBEntry buffer[MAX_SB_SIZE];
+        int head; // Oldest
+        int tail; // Newest
+        int count;
+        bool enabled;
+    } RISCVStoreBuffer;
+
+    RISCVStoreBuffer sb;
+
 #ifdef CONFIG_USER_ONLY
     uint32_t elf_flags;
 #endif
