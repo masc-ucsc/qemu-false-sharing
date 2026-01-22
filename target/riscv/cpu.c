@@ -741,12 +741,31 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
   }
 #endif
 
-  /* Store Buffer Reset */
+  /* Store Buffer Reset & Dynamic Initialization */
+  env->sb.enabled = (riscv_sb_global_limit > 0);
+  env->sb.log_interactions = riscv_sb_global_false_sharing;
+  env->sb.detect_deadlocks = riscv_sb_global_deadlock;
+  env->sb.capacity = riscv_sb_global_limit > 0 ? riscv_sb_global_limit : 0;
+
+  if (env->sb.enabled) {
+    if (!env->sb.buffer) {
+      env->sb.buffer = g_malloc0(env->sb.capacity * sizeof(SBEntry));
+    } else {
+      /* Re-allocate if size changed? For now assume size is constant once set
+       */
+      memset(env->sb.buffer, 0, env->sb.capacity * sizeof(SBEntry));
+    }
+  }
+
   env->sb.head = 0;
   env->sb.tail = 0;
   env->sb.count = 0;
-  env->sb.enabled = true; // Enable by default for now
 }
+
+/* Global Store Buffer Configuration (Defaults) */
+int riscv_sb_global_limit = 256;
+bool riscv_sb_global_false_sharing = false;
+bool riscv_sb_global_deadlock = false;
 
 static void riscv_cpu_disas_set_info(CPUState *s, disassemble_info *info) {
   RISCVCPU *cpu = RISCV_CPU(s);

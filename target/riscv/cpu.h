@@ -20,29 +20,29 @@
 #ifndef RISCV_CPU_H
 #define RISCV_CPU_H
 
-#include "hw/core/cpu.h"
-#include "hw/core/registerfields.h"
-#include "hw/core/qdev-properties.h"
+#include "cpu-qom.h"
+#include "cpu_bits.h"
+#include "cpu_cfg.h"
 #include "exec/cpu-common.h"
 #include "exec/cpu-defs.h"
 #include "exec/cpu-interrupt.h"
 #include "exec/gdbstub.h"
-#include "qemu/cpu-float.h"
-#include "qom/object.h"
-#include "qemu/int128.h"
-#include "cpu_bits.h"
-#include "cpu_cfg.h"
+#include "hw/core/cpu.h"
+#include "hw/core/qdev-properties.h"
+#include "hw/core/registerfields.h"
 #include "qapi/qapi-types-common.h"
-#include "cpu-qom.h"
+#include "qemu/cpu-float.h"
+#include "qemu/int128.h"
+#include "qom/object.h"
 
 typedef struct CPUArchState CPURISCVState;
 
 #define CPU_RESOLVING_TYPE TYPE_RISCV_CPU
 
 #if defined(TARGET_RISCV32)
-# define TYPE_RISCV_CPU_BASE            TYPE_RISCV_CPU_BASE32
+#define TYPE_RISCV_CPU_BASE TYPE_RISCV_CPU_BASE32
 #elif defined(TARGET_RISCV64)
-# define TYPE_RISCV_CPU_BASE            TYPE_RISCV_CPU_BASE64
+#define TYPE_RISCV_CPU_BASE TYPE_RISCV_CPU_BASE64
 #endif
 
 /*
@@ -78,30 +78,30 @@ const char *riscv_get_misa_ext_description(uint32_t bit);
 #define ENV_CSR_OFFSET(_csr) offsetof(CPURISCVState, _csr)
 
 typedef struct riscv_cpu_profile {
-    struct riscv_cpu_profile *u_parent;
-    struct riscv_cpu_profile *s_parent;
-    const char *name;
-    uint32_t misa_ext;
-    /*
-     * The profile is enabled/disabled via command line or
-     * via cpu_init(). Enabling a profile will add all its
-     * mandatory extensions in the CPU during init().
-     */
-    bool enabled;
-    /*
-     * The profile is present in the CPU, i.e. the current set of
-     * CPU extensions complies with it. A profile can be enabled
-     * and not present (e.g. the user disabled a mandatory extension)
-     * and the other way around (e.g. all mandatory extensions are
-     * present in a non-profile CPU).
-     *
-     * QMP uses this flag.
-     */
-    bool present;
-    bool user_set;
-    int priv_spec;
-    int satp_mode;
-    const int32_t ext_offsets[];
+  struct riscv_cpu_profile *u_parent;
+  struct riscv_cpu_profile *s_parent;
+  const char *name;
+  uint32_t misa_ext;
+  /*
+   * The profile is enabled/disabled via command line or
+   * via cpu_init(). Enabling a profile will add all its
+   * mandatory extensions in the CPU during init().
+   */
+  bool enabled;
+  /*
+   * The profile is present in the CPU, i.e. the current set of
+   * CPU extensions complies with it. A profile can be enabled
+   * and not present (e.g. the user disabled a mandatory extension)
+   * and the other way around (e.g. all mandatory extensions are
+   * present in a non-profile CPU).
+   *
+   * QMP uses this flag.
+   */
+  bool present;
+  bool user_set;
+  int priv_spec;
+  int satp_mode;
+  const int32_t ext_offsets[];
 } RISCVCPUProfile;
 
 #define RISCV_PROFILE_EXT_LIST_END -1
@@ -115,56 +115,56 @@ extern RISCVCPUProfile *riscv_profiles[];
 #define PRIV_VER_1_12_0_STR "v1.12.0"
 #define PRIV_VER_1_13_0_STR "v1.13.0"
 enum {
-    PRIV_VERSION_1_10_0 = 0,
-    PRIV_VERSION_1_11_0,
-    PRIV_VERSION_1_12_0,
-    PRIV_VERSION_1_13_0,
+  PRIV_VERSION_1_10_0 = 0,
+  PRIV_VERSION_1_11_0,
+  PRIV_VERSION_1_12_0,
+  PRIV_VERSION_1_13_0,
 
-    PRIV_VERSION_LATEST = PRIV_VERSION_1_13_0,
+  PRIV_VERSION_LATEST = PRIV_VERSION_1_13_0,
 };
 
 #define VEXT_VERSION_1_00_0 0x00010000
 #define VEXT_VER_1_00_0_STR "v1.0"
 
 enum {
-    TRANSLATE_SUCCESS,
-    TRANSLATE_FAIL,
-    TRANSLATE_PMP_FAIL,
-    TRANSLATE_G_STAGE_FAIL
+  TRANSLATE_SUCCESS,
+  TRANSLATE_FAIL,
+  TRANSLATE_PMP_FAIL,
+  TRANSLATE_G_STAGE_FAIL
 };
 
 /* Extension context status */
 typedef enum {
-    EXT_STATUS_DISABLED = 0,
-    EXT_STATUS_INITIAL,
-    EXT_STATUS_CLEAN,
-    EXT_STATUS_DIRTY,
+  EXT_STATUS_DISABLED = 0,
+  EXT_STATUS_INITIAL,
+  EXT_STATUS_CLEAN,
+  EXT_STATUS_DIRTY,
 } RISCVExtStatus;
 
 /* Enum holds PMM field values for Zjpm v1.0 extension */
 typedef enum {
-    PMM_FIELD_DISABLED = 0,
-    PMM_FIELD_RESERVED = 1,
-    PMM_FIELD_PMLEN7   = 2,
-    PMM_FIELD_PMLEN16  = 3,
+  PMM_FIELD_DISABLED = 0,
+  PMM_FIELD_RESERVED = 1,
+  PMM_FIELD_PMLEN7 = 2,
+  PMM_FIELD_PMLEN16 = 3,
 } RISCVPmPmm;
 
 typedef struct riscv_cpu_implied_exts_rule {
 #ifndef CONFIG_USER_ONLY
-    /*
-     * Bitmask indicates the rule enabled status for the harts.
-     * This enhancement is only available in system-mode QEMU,
-     * as we don't have a good way (e.g. mhartid) to distinguish
-     * the SMP cores in user-mode QEMU.
-     */
-    unsigned long *enabled;
+  /*
+   * Bitmask indicates the rule enabled status for the harts.
+   * This enhancement is only available in system-mode QEMU,
+   * as we don't have a good way (e.g. mhartid) to distinguish
+   * the SMP cores in user-mode QEMU.
+   */
+  unsigned long *enabled;
 #endif
-    /* True if this is a MISA implied rule. */
-    bool is_misa;
-    /* ext is MISA bit if is_misa flag is true, else multi extension offset. */
-    const uint32_t ext;
-    const uint32_t implied_misa_exts;
-    const uint32_t implied_multi_exts[];
+  /* True if this is a MISA implied rule. */
+  bool is_misa;
+  /* ext is MISA bit if is_misa flag is true, else multi extension offset. */
+  const uint32_t ext;
+  const uint32_t implied_misa_exts;
+  const uint32_t implied_multi_exts[];
 } RISCVCPUImpliedExtsRule;
 
 extern RISCVCPUImpliedExtsRule *riscv_misa_ext_implied_rules[];
@@ -179,8 +179,8 @@ extern RISCVCPUImpliedExtsRule *riscv_multi_ext_implied_rules[];
 #define MIN_RISCV_PMP_GRANULARITY 4
 
 #if !defined(CONFIG_USER_ONLY)
-#include "pmp.h"
 #include "debug.h"
+#include "pmp.h"
 #endif
 
 #define RV_VLEN_MAX 1024
@@ -195,338 +195,343 @@ FIELD(VTYPE, VEDIV, 8, 2)
 FIELD(VTYPE, RESERVED, 10, sizeof(target_ulong) * 8 - 11)
 
 typedef struct PMUCTRState {
-    /* Current value of a counter */
-    uint64_t mhpmcounter_val;
-    /* Snapshot value of a counter */
-    uint64_t mhpmcounter_prev;
-    /* Value beyond UINT32_MAX/UINT64_MAX before overflow interrupt trigger */
-    target_ulong irq_overflow_left;
+  /* Current value of a counter */
+  uint64_t mhpmcounter_val;
+  /* Snapshot value of a counter */
+  uint64_t mhpmcounter_prev;
+  /* Value beyond UINT32_MAX/UINT64_MAX before overflow interrupt trigger */
+  target_ulong irq_overflow_left;
 } PMUCTRState;
 
 typedef struct PMUFixedCtrState {
-        /* Track cycle and icount for each privilege mode */
-        uint64_t counter[4];
-        uint64_t counter_prev[4];
-        /* Track cycle and icount for each privilege mode when V = 1*/
-        uint64_t counter_virt[2];
-        uint64_t counter_virt_prev[2];
+  /* Track cycle and icount for each privilege mode */
+  uint64_t counter[4];
+  uint64_t counter_prev[4];
+  /* Track cycle and icount for each privilege mode when V = 1*/
+  uint64_t counter_virt[2];
+  uint64_t counter_virt_prev[2];
 } PMUFixedCtrState;
 
 struct CPUArchState {
-    target_ulong gpr[32];
-    target_ulong gprh[32]; /* 64 top bits of the 128-bit registers */
+  target_ulong gpr[32];
+  target_ulong gprh[32]; /* 64 top bits of the 128-bit registers */
 
-    /* vector coprocessor state. */
-    uint64_t vreg[32 * RV_VLEN_MAX / 64] QEMU_ALIGNED(16);
-    target_ulong vxrm;
-    target_ulong vxsat;
-    target_ulong vl;
-    target_ulong vstart;
-    target_ulong vtype;
-    bool vill;
+  /* vector coprocessor state. */
+  uint64_t vreg[32 * RV_VLEN_MAX / 64] QEMU_ALIGNED(16);
+  target_ulong vxrm;
+  target_ulong vxsat;
+  target_ulong vl;
+  target_ulong vstart;
+  target_ulong vtype;
+  bool vill;
 
-    target_ulong pc;
-    target_ulong load_res;
-    target_ulong load_val;
+  target_ulong pc;
+  target_ulong load_res;
+  target_ulong load_val;
 
-    /* Floating-Point state */
-    uint64_t fpr[32]; /* assume both F and D extensions */
-    target_ulong frm;
-    float_status fp_status;
+  /* Floating-Point state */
+  uint64_t fpr[32]; /* assume both F and D extensions */
+  target_ulong frm;
+  float_status fp_status;
 
-    target_ulong badaddr;
-    target_ulong bins;
+  target_ulong badaddr;
+  target_ulong bins;
 
-    target_ulong guest_phys_fault_addr;
+  target_ulong guest_phys_fault_addr;
 
-    target_ulong priv_ver;
-    target_ulong vext_ver;
+  target_ulong priv_ver;
+  target_ulong vext_ver;
 
-    /* RISCVMXL, but uint32_t for vmstate migration */
-    uint32_t misa_mxl;      /* current mxl */
-    uint32_t misa_ext;      /* current extensions */
-    uint32_t misa_ext_mask; /* max ext for this cpu */
-    uint32_t xl;            /* current xlen */
+  /* RISCVMXL, but uint32_t for vmstate migration */
+  uint32_t misa_mxl;      /* current mxl */
+  uint32_t misa_ext;      /* current extensions */
+  uint32_t misa_ext_mask; /* max ext for this cpu */
+  uint32_t xl;            /* current xlen */
 
-    /* 128-bit helpers upper part return value */
-    target_ulong retxh;
+  /* 128-bit helpers upper part return value */
+  target_ulong retxh;
 
-    uint64_t jvt;
+  uint64_t jvt;
 
-    /* elp state for zicfilp extension */
-    bool      elp;
-    /* shadow stack register for zicfiss extension */
-    target_ulong ssp;
-    /* env place holder for extra word 2 during unwind */
-    target_ulong excp_uw2;
-    /* sw check code for sw check exception */
-    target_ulong sw_check_code;
+  /* elp state for zicfilp extension */
+  bool elp;
+  /* shadow stack register for zicfiss extension */
+  target_ulong ssp;
+  /* env place holder for extra word 2 during unwind */
+  target_ulong excp_uw2;
+  /* sw check code for sw check exception */
+  target_ulong sw_check_code;
 
 #define MAX_SB_SIZE 256
 
-    typedef struct {
-        uint64_t addr;
-        uint64_t data;
-        int size;       // 1, 2, 4, 8 bytes
-    } SBEntry;
+  typedef struct {
+    uint64_t addr;
+    uint64_t data;
+    int size; // 1, 2, 4, 8 bytes
+  } SBEntry;
 
-    typedef struct {
-        SBEntry buffer[MAX_SB_SIZE];
-        int head; // Oldest
-        int tail; // Newest
-        int count;
-        bool enabled;
-    } RISCVStoreBuffer;
+  typedef struct {
+    SBEntry *buffer; // Dynamic allocation
+    int capacity;    // Max entries
+    int head;        // Oldest
+    int tail;        // Newest
+    int count;
+    bool enabled;
+    bool log_interactions;
+    bool detect_deadlocks;
+  } RISCVStoreBuffer;
 
-    RISCVStoreBuffer sb;
+  RISCVStoreBuffer sb;
+
+  /* Global properties for dynamic usage (set by CLI) */
+  extern int riscv_sb_global_limit;
+  extern bool riscv_sb_global_false_sharing;
+  extern bool riscv_sb_global_deadlock;
 
 #ifdef CONFIG_USER_ONLY
-    uint32_t elf_flags;
+  uint32_t elf_flags;
 #endif
 
-    target_ulong priv;
-    /* CSRs for execution environment configuration */
-    uint64_t menvcfg;
-    uint64_t senvcfg;
+  target_ulong priv;
+  /* CSRs for execution environment configuration */
+  uint64_t menvcfg;
+  uint64_t senvcfg;
 
 #ifndef CONFIG_USER_ONLY
-    /* This contains QEMU specific information about the virt state. */
-    bool virt_enabled;
-    target_ulong geilen;
-    uint64_t resetvec;
+  /* This contains QEMU specific information about the virt state. */
+  bool virt_enabled;
+  target_ulong geilen;
+  uint64_t resetvec;
 
-    uint64_t mhartid;
-    /*
-     * For RV32 this is 32-bit mstatus and 32-bit mstatush.
-     * For RV64 this is a 64-bit mstatus.
-     */
-    uint64_t mstatus;
+  uint64_t mhartid;
+  /*
+   * For RV32 this is 32-bit mstatus and 32-bit mstatush.
+   * For RV64 this is a 64-bit mstatus.
+   */
+  uint64_t mstatus;
 
-    uint64_t mip;
-    /*
-     * MIP contains the software writable version of SEIP ORed with the
-     * external interrupt value. The MIP register is always up-to-date.
-     * To keep track of the current source, we also save booleans of the values
-     * here.
-     */
-    bool external_seip;
-    bool software_seip;
+  uint64_t mip;
+  /*
+   * MIP contains the software writable version of SEIP ORed with the
+   * external interrupt value. The MIP register is always up-to-date.
+   * To keep track of the current source, we also save booleans of the values
+   * here.
+   */
+  bool external_seip;
+  bool software_seip;
 
-    uint64_t miclaim;
+  uint64_t miclaim;
 
-    uint64_t mie;
-    uint64_t mideleg;
+  uint64_t mie;
+  uint64_t mideleg;
 
-    /*
-     * When mideleg[i]=0 and mvien[i]=1, sie[i] is no more
-     * alias of mie[i] and needs to be maintained separately.
-     */
-    uint64_t sie;
+  /*
+   * When mideleg[i]=0 and mvien[i]=1, sie[i] is no more
+   * alias of mie[i] and needs to be maintained separately.
+   */
+  uint64_t sie;
 
-    /*
-     * When hideleg[i]=0 and hvien[i]=1, vsie[i] is no more
-     * alias of sie[i] (mie[i]) and needs to be maintained separately.
-     */
-    uint64_t vsie;
+  /*
+   * When hideleg[i]=0 and hvien[i]=1, vsie[i] is no more
+   * alias of sie[i] (mie[i]) and needs to be maintained separately.
+   */
+  uint64_t vsie;
 
-    uint64_t satp;   /* since: priv-1.10.0 */
-    uint64_t stval;
-    uint64_t medeleg;
+  uint64_t satp; /* since: priv-1.10.0 */
+  uint64_t stval;
+  uint64_t medeleg;
 
-    uint64_t stvec;
-    uint64_t sepc;
-    uint64_t scause;
+  uint64_t stvec;
+  uint64_t sepc;
+  uint64_t scause;
 
-    uint64_t mtvec;
-    uint64_t mepc;
-    uint64_t mcause;
-    uint64_t mtval;  /* since: priv-1.10.0 */
+  uint64_t mtvec;
+  uint64_t mepc;
+  uint64_t mcause;
+  uint64_t mtval; /* since: priv-1.10.0 */
 
-    uint64_t mctrctl;
-    uint32_t sctrdepth;
-    uint32_t sctrstatus;
-    uint64_t vsctrctl;
+  uint64_t mctrctl;
+  uint32_t sctrdepth;
+  uint32_t sctrstatus;
+  uint64_t vsctrctl;
 
-    uint64_t ctr_src[16 << SCTRDEPTH_MAX];
-    uint64_t ctr_dst[16 << SCTRDEPTH_MAX];
-    uint64_t ctr_data[16 << SCTRDEPTH_MAX];
+  uint64_t ctr_src[16 << SCTRDEPTH_MAX];
+  uint64_t ctr_dst[16 << SCTRDEPTH_MAX];
+  uint64_t ctr_data[16 << SCTRDEPTH_MAX];
 
-    /* Machine and Supervisor interrupt priorities */
-    uint8_t miprio[64];
-    uint8_t siprio[64];
+  /* Machine and Supervisor interrupt priorities */
+  uint8_t miprio[64];
+  uint8_t siprio[64];
 
-    /* AIA CSRs */
-    target_ulong miselect;
-    target_ulong siselect;
-    uint64_t mvien;
-    uint64_t mvip;
+  /* AIA CSRs */
+  target_ulong miselect;
+  target_ulong siselect;
+  uint64_t mvien;
+  uint64_t mvip;
 
-    /* Hypervisor CSRs */
-    uint64_t hstatus;
-    uint64_t hedeleg;
-    uint64_t hideleg;
-    uint32_t hcounteren;
-    uint64_t htval;
-    uint64_t htinst;
-    uint64_t hgatp;
-    target_ulong hgeie;
-    target_ulong hgeip;
-    uint64_t htimedelta;
-    uint64_t hvien;
+  /* Hypervisor CSRs */
+  uint64_t hstatus;
+  uint64_t hedeleg;
+  uint64_t hideleg;
+  uint32_t hcounteren;
+  uint64_t htval;
+  uint64_t htinst;
+  uint64_t hgatp;
+  target_ulong hgeie;
+  target_ulong hgeip;
+  uint64_t htimedelta;
+  uint64_t hvien;
 
-    /*
-     * Bits VSSIP, VSTIP and VSEIP in hvip are maintained in mip. Other bits
-     * from 0:12 are reserved. Bits 13:63 are not aliased and must be separately
-     * maintain in hvip.
-     */
-    uint64_t hvip;
+  /*
+   * Bits VSSIP, VSTIP and VSEIP in hvip are maintained in mip. Other bits
+   * from 0:12 are reserved. Bits 13:63 are not aliased and must be separately
+   * maintain in hvip.
+   */
+  uint64_t hvip;
 
-    /* Hypervisor controlled virtual interrupt priorities */
-    uint32_t hvictl;
-    uint8_t hviprio[64];
+  /* Hypervisor controlled virtual interrupt priorities */
+  uint32_t hvictl;
+  uint8_t hviprio[64];
 
-    /* Upper 64-bits of 128-bit CSRs */
-    uint64_t mscratchh;
-    uint64_t sscratchh;
+  /* Upper 64-bits of 128-bit CSRs */
+  uint64_t mscratchh;
+  uint64_t sscratchh;
 
-    /* Virtual CSRs */
-    /*
-     * For RV32 this is 32-bit vsstatus and 32-bit vsstatush.
-     * For RV64 this is a 64-bit vsstatus.
-     */
-    uint64_t vsstatus;
-    uint64_t vstvec;
-    uint64_t vsscratch;
-    uint64_t vsepc;
-    uint64_t vscause;
-    uint64_t vstval;
-    uint64_t vsatp;
+  /* Virtual CSRs */
+  /*
+   * For RV32 this is 32-bit vsstatus and 32-bit vsstatush.
+   * For RV64 this is a 64-bit vsstatus.
+   */
+  uint64_t vsstatus;
+  uint64_t vstvec;
+  uint64_t vsscratch;
+  uint64_t vsepc;
+  uint64_t vscause;
+  uint64_t vstval;
+  uint64_t vsatp;
 
-    /* AIA VS-mode CSRs */
-    target_ulong vsiselect;
+  /* AIA VS-mode CSRs */
+  target_ulong vsiselect;
 
-    uint64_t mtval2;
-    uint64_t mtinst;
+  uint64_t mtval2;
+  uint64_t mtinst;
 
-    /* HS Backup CSRs */
-    uint64_t stvec_hs;
-    uint64_t sscratch_hs;
-    uint64_t sepc_hs;
-    uint64_t scause_hs;
-    uint64_t stval_hs;
-    uint64_t satp_hs;
-    uint64_t mstatus_hs;
+  /* HS Backup CSRs */
+  uint64_t stvec_hs;
+  uint64_t sscratch_hs;
+  uint64_t sepc_hs;
+  uint64_t scause_hs;
+  uint64_t stval_hs;
+  uint64_t satp_hs;
+  uint64_t mstatus_hs;
 
-    /*
-     * Signals whether the current exception occurred with two-stage address
-     * translation active.
-     */
-    bool two_stage_lookup;
-    /*
-     * Signals whether the current exception occurred while doing two-stage
-     * address translation for the VS-stage page table walk.
-     */
-    bool two_stage_indirect_lookup;
+  /*
+   * Signals whether the current exception occurred with two-stage address
+   * translation active.
+   */
+  bool two_stage_lookup;
+  /*
+   * Signals whether the current exception occurred while doing two-stage
+   * address translation for the VS-stage page table walk.
+   */
+  bool two_stage_indirect_lookup;
 
-    uint32_t scounteren;
-    uint32_t mcounteren;
+  uint32_t scounteren;
+  uint32_t mcounteren;
 
-    uint32_t scountinhibit;
-    uint32_t mcountinhibit;
+  uint32_t scountinhibit;
+  uint32_t mcountinhibit;
 
-    /* PMU cycle & instret privilege mode filtering */
-    uint64_t mcyclecfg;
-    uint64_t minstretcfg;
+  /* PMU cycle & instret privilege mode filtering */
+  uint64_t mcyclecfg;
+  uint64_t minstretcfg;
 
-    /* PMU counter state */
-    PMUCTRState pmu_ctrs[RV_MAX_MHPMCOUNTERS];
+  /* PMU counter state */
+  PMUCTRState pmu_ctrs[RV_MAX_MHPMCOUNTERS];
 
-    /*
-     * PMU event selector configured values. First three are unused.
-     * For RV32 top 32 bits are accessed via the mhpmeventh CSR.
-     */
-    uint64_t mhpmevent_val[RV_MAX_MHPMEVENTS];
+  /*
+   * PMU event selector configured values. First three are unused.
+   * For RV32 top 32 bits are accessed via the mhpmeventh CSR.
+   */
+  uint64_t mhpmevent_val[RV_MAX_MHPMEVENTS];
 
-    PMUFixedCtrState pmu_fixed_ctrs[2];
+  PMUFixedCtrState pmu_fixed_ctrs[2];
 
-    uint64_t sscratch;
-    uint64_t mscratch;
+  uint64_t sscratch;
+  uint64_t mscratch;
 
-    /* Sstc CSRs */
-    uint64_t stimecmp;
+  /* Sstc CSRs */
+  uint64_t stimecmp;
 
-    uint64_t vstimecmp;
+  uint64_t vstimecmp;
 
-    /* physical memory protection */
-    pmp_table_t pmp_state;
-    target_ulong mseccfg;
+  /* physical memory protection */
+  pmp_table_t pmp_state;
+  target_ulong mseccfg;
 
-    /* trigger module */
-    target_ulong trigger_cur;
-    target_ulong tdata1[RV_MAX_TRIGGERS];
-    target_ulong tdata2[RV_MAX_TRIGGERS];
-    target_ulong tdata3[RV_MAX_TRIGGERS];
-    target_ulong mcontext;
-    struct CPUBreakpoint *cpu_breakpoint[RV_MAX_TRIGGERS];
-    struct CPUWatchpoint *cpu_watchpoint[RV_MAX_TRIGGERS];
-    QEMUTimer *itrigger_timer[RV_MAX_TRIGGERS];
-    int64_t last_icount;
-    bool itrigger_enabled;
+  /* trigger module */
+  target_ulong trigger_cur;
+  target_ulong tdata1[RV_MAX_TRIGGERS];
+  target_ulong tdata2[RV_MAX_TRIGGERS];
+  target_ulong tdata3[RV_MAX_TRIGGERS];
+  target_ulong mcontext;
+  struct CPUBreakpoint *cpu_breakpoint[RV_MAX_TRIGGERS];
+  struct CPUWatchpoint *cpu_watchpoint[RV_MAX_TRIGGERS];
+  QEMUTimer *itrigger_timer[RV_MAX_TRIGGERS];
+  int64_t last_icount;
+  bool itrigger_enabled;
 
-    /* machine specific rdtime callback */
-    uint64_t (*rdtime_fn)(void *);
-    void *rdtime_fn_arg;
+  /* machine specific rdtime callback */
+  uint64_t (*rdtime_fn)(void *);
+  void *rdtime_fn_arg;
 
-    /* machine specific AIA ireg read-modify-write callback */
-#define AIA_MAKE_IREG(__isel, __priv, __virt, __vgein, __xlen) \
-    ((((__xlen) & 0xff) << 24) | \
-     (((__vgein) & 0x3f) << 20) | \
-     (((__virt) & 0x1) << 18) | \
-     (((__priv) & 0x3) << 16) | \
-     (__isel & 0xffff))
-#define AIA_IREG_ISEL(__ireg)                  ((__ireg) & 0xffff)
-#define AIA_IREG_PRIV(__ireg)                  (((__ireg) >> 16) & 0x3)
-#define AIA_IREG_VIRT(__ireg)                  (((__ireg) >> 18) & 0x1)
-#define AIA_IREG_VGEIN(__ireg)                 (((__ireg) >> 20) & 0x3f)
-#define AIA_IREG_XLEN(__ireg)                  (((__ireg) >> 24) & 0xff)
-    int (*aia_ireg_rmw_fn[4])(void *arg, target_ulong reg,
-        target_ulong *val, target_ulong new_val, target_ulong write_mask);
-    void *aia_ireg_rmw_fn_arg[4];
+  /* machine specific AIA ireg read-modify-write callback */
+#define AIA_MAKE_IREG(__isel, __priv, __virt, __vgein, __xlen)                 \
+  ((((__xlen) & 0xff) << 24) | (((__vgein) & 0x3f) << 20) |                    \
+   (((__virt) & 0x1) << 18) | (((__priv) & 0x3) << 16) | (__isel & 0xffff))
+#define AIA_IREG_ISEL(__ireg) ((__ireg) & 0xffff)
+#define AIA_IREG_PRIV(__ireg) (((__ireg) >> 16) & 0x3)
+#define AIA_IREG_VIRT(__ireg) (((__ireg) >> 18) & 0x1)
+#define AIA_IREG_VGEIN(__ireg) (((__ireg) >> 20) & 0x3f)
+#define AIA_IREG_XLEN(__ireg) (((__ireg) >> 24) & 0xff)
+  int (*aia_ireg_rmw_fn[4])(void *arg, target_ulong reg, target_ulong *val,
+                            target_ulong new_val, target_ulong write_mask);
+  void *aia_ireg_rmw_fn_arg[4];
 
-    /* True if in debugger mode.  */
-    bool debugger;
+  /* True if in debugger mode.  */
+  bool debugger;
 
-    uint64_t mstateen[SMSTATEEN_MAX_COUNT];
-    uint64_t hstateen[SMSTATEEN_MAX_COUNT];
-    uint64_t sstateen[SMSTATEEN_MAX_COUNT];
-    uint64_t henvcfg;
+  uint64_t mstateen[SMSTATEEN_MAX_COUNT];
+  uint64_t hstateen[SMSTATEEN_MAX_COUNT];
+  uint64_t sstateen[SMSTATEEN_MAX_COUNT];
+  uint64_t henvcfg;
 #endif
 
-    /* Fields from here on are preserved across CPU reset. */
-    QEMUTimer *stimer; /* Internal timer for S-mode interrupt */
-    QEMUTimer *vstimer; /* Internal timer for VS-mode interrupt */
-    bool vstime_irq;
+  /* Fields from here on are preserved across CPU reset. */
+  QEMUTimer *stimer;  /* Internal timer for S-mode interrupt */
+  QEMUTimer *vstimer; /* Internal timer for VS-mode interrupt */
+  bool vstime_irq;
 
-    hwaddr kernel_addr;
-    hwaddr fdt_addr;
+  hwaddr kernel_addr;
+  hwaddr fdt_addr;
 
 #ifdef CONFIG_KVM
-    /* kvm timer */
-    bool kvm_timer_dirty;
-    uint64_t kvm_timer_time;
-    uint64_t kvm_timer_compare;
-    uint64_t kvm_timer_state;
-    uint64_t kvm_timer_frequency;
+  /* kvm timer */
+  bool kvm_timer_dirty;
+  uint64_t kvm_timer_time;
+  uint64_t kvm_timer_compare;
+  uint64_t kvm_timer_state;
+  uint64_t kvm_timer_frequency;
 #endif /* CONFIG_KVM */
 
-    /* RNMI */
-    uint64_t mnscratch;
-    uint64_t mnepc;
-    uint64_t mncause; /* mncause without bit XLEN-1 set to 1 */
-    uint64_t mnstatus;
-    uint64_t rnmip;
-    uint64_t rnmi_irqvec;
-    uint64_t rnmi_excpvec;
+  /* RNMI */
+  uint64_t mnscratch;
+  uint64_t mnepc;
+  uint64_t mncause; /* mncause without bit XLEN-1 set to 1 */
+  uint64_t mnstatus;
+  uint64_t rnmip;
+  uint64_t rnmi_irqvec;
+  uint64_t rnmi_excpvec;
 };
 
 /*
@@ -539,7 +544,7 @@ struct CPUArchState {
  * configuration as per the specification.
  */
 typedef struct {
-    uint16_t map, init;
+  uint16_t map, init;
 } RISCVSATPModes;
 
 /*
@@ -549,36 +554,36 @@ typedef struct {
  * A RISCV CPU.
  */
 struct ArchCPU {
-    CPUState parent_obj;
+  CPUState parent_obj;
 
-    CPURISCVState env;
+  CPURISCVState env;
 
-    GDBFeature dyn_csr_feature;
-    GDBFeature dyn_vreg_feature;
+  GDBFeature dyn_csr_feature;
+  GDBFeature dyn_vreg_feature;
 
-    /* Configuration Settings */
-    RISCVCPUConfig cfg;
-    RISCVSATPModes satp_modes;
+  /* Configuration Settings */
+  RISCVCPUConfig cfg;
+  RISCVSATPModes satp_modes;
 
-    QEMUTimer *pmu_timer;
-    /* A bitmask of Available programmable counters */
-    uint32_t pmu_avail_ctrs;
-    /* Mapping of events to counters */
-    GHashTable *pmu_event_ctr_map;
-    const GPtrArray *decoders;
+  QEMUTimer *pmu_timer;
+  /* A bitmask of Available programmable counters */
+  uint32_t pmu_avail_ctrs;
+  /* Mapping of events to counters */
+  GHashTable *pmu_event_ctr_map;
+  const GPtrArray *decoders;
 };
 
 typedef struct RISCVCSR RISCVCSR;
 
 typedef struct RISCVCPUDef {
-    RISCVMXL misa_mxl_max;  /* max mxl for this cpu */
-    RISCVCPUProfile *profile;
-    uint32_t misa_ext;
-    int priv_spec;
-    int32_t vext_spec;
-    RISCVCPUConfig cfg;
-    bool bare;
-    const RISCVCSR *custom_csrs;
+  RISCVMXL misa_mxl_max; /* max mxl for this cpu */
+  RISCVCPUProfile *profile;
+  uint32_t misa_ext;
+  int priv_spec;
+  int32_t vext_spec;
+  RISCVCPUConfig cfg;
+  bool bare;
+  const RISCVCSR *custom_csrs;
 } RISCVCPUDef;
 
 /**
@@ -589,30 +594,29 @@ typedef struct RISCVCPUDef {
  * A RISCV CPU model.
  */
 struct RISCVCPUClass {
-    CPUClass parent_class;
+  CPUClass parent_class;
 
-    DeviceRealize parent_realize;
-    ResettablePhases parent_phases;
-    RISCVCPUDef *def;
+  DeviceRealize parent_realize;
+  ResettablePhases parent_phases;
+  RISCVCPUDef *def;
 };
 
-static inline int riscv_has_ext(CPURISCVState *env, uint32_t ext)
-{
-    return (env->misa_ext & ext) != 0;
+static inline int riscv_has_ext(CPURISCVState *env, uint32_t ext) {
+  return (env->misa_ext & ext) != 0;
 }
 
 #include "cpu_user.h"
 
-extern const char * const riscv_int_regnames[];
-extern const char * const riscv_int_regnamesh[];
-extern const char * const riscv_fpr_regnames[];
-extern const char * const riscv_rvv_regnames[];
+extern const char *const riscv_int_regnames[];
+extern const char *const riscv_int_regnamesh[];
+extern const char *const riscv_fpr_regnames[];
+extern const char *const riscv_rvv_regnames[];
 
 const char *riscv_cpu_get_trap_name(target_ulong cause, bool async);
-int riscv_cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cs,
-                               int cpuid, DumpState *s);
-int riscv_cpu_write_elf32_note(WriteCoreDumpFunction f, CPUState *cs,
-                               int cpuid, DumpState *s);
+int riscv_cpu_write_elf64_note(WriteCoreDumpFunction f, CPUState *cs, int cpuid,
+                               DumpState *s);
+int riscv_cpu_write_elf32_note(WriteCoreDumpFunction f, CPUState *cs, int cpuid,
+                               DumpState *s);
 int riscv_cpu_gdb_read_register(CPUState *cpu, GByteArray *buf, int reg);
 int riscv_cpu_gdb_write_register(CPUState *cpu, uint8_t *buf, int reg);
 int riscv_cpu_hviprio_index2irq(int index, int *out_irq, int *out_rdzero);
@@ -630,12 +634,12 @@ int riscv_env_mmu_index(CPURISCVState *env, bool ifetch);
 bool cpu_get_fcfien(CPURISCVState *env);
 bool cpu_get_bcfien(CPURISCVState *env);
 bool riscv_env_smode_dbltrp_enabled(CPURISCVState *env, bool virt);
-G_NORETURN void  riscv_cpu_do_unaligned_access(CPUState *cs, vaddr addr,
-                                               MMUAccessType access_type,
-                                               int mmu_idx, uintptr_t retaddr);
+G_NORETURN void riscv_cpu_do_unaligned_access(CPUState *cs, vaddr addr,
+                                              MMUAccessType access_type,
+                                              int mmu_idx, uintptr_t retaddr);
 bool riscv_cpu_tlb_fill(CPUState *cs, vaddr address, int size,
-                        MMUAccessType access_type, int mmu_idx,
-                        bool probe, uintptr_t retaddr);
+                        MMUAccessType access_type, int mmu_idx, bool probe,
+                        uintptr_t retaddr);
 char *riscv_isa_string(RISCVCPU *cpu);
 int riscv_cpu_max_xlen(RISCVCPUClass *mcc);
 bool riscv_cpu_option_set(const char *optname);
@@ -643,9 +647,8 @@ bool riscv_cpu_option_set(const char *optname);
 #ifndef CONFIG_USER_ONLY
 void riscv_cpu_do_interrupt(CPUState *cpu);
 void riscv_isa_write_fdt(RISCVCPU *cpu, void *fdt, char *nodename);
-void riscv_cpu_do_transaction_failed(CPUState *cs, hwaddr physaddr,
-                                     vaddr addr, unsigned size,
-                                     MMUAccessType access_type,
+void riscv_cpu_do_transaction_failed(CPUState *cs, hwaddr physaddr, vaddr addr,
+                                     unsigned size, MMUAccessType access_type,
                                      int mmu_idx, MemTxAttrs attrs,
                                      MemTxResult response, uintptr_t retaddr);
 hwaddr riscv_cpu_get_phys_page_debug(CPUState *cpu, vaddr addr);
@@ -660,8 +663,7 @@ void riscv_cpu_interrupt(CPURISCVState *env);
 void riscv_cpu_set_rdtime_fn(CPURISCVState *env, uint64_t (*fn)(void *),
                              void *arg);
 void riscv_cpu_set_aia_ireg_rmw_fn(CPURISCVState *env, uint32_t priv,
-                                   int (*rmw_fn)(void *arg,
-                                                 target_ulong reg,
+                                   int (*rmw_fn)(void *arg, target_ulong reg,
                                                  target_ulong *val,
                                                  target_ulong new_val,
                                                  target_ulong write_mask),
@@ -673,16 +675,16 @@ RISCVException smstateen_acc_ok(CPURISCVState *env, int index, uint64_t bit);
 void riscv_cpu_set_mode(CPURISCVState *env, target_ulong newpriv, bool virt_en);
 
 void riscv_ctr_add_entry(CPURISCVState *env, target_long src, target_long dst,
-    enum CTRType type, target_ulong prev_priv, bool prev_virt);
+                         enum CTRType type, target_ulong prev_priv,
+                         bool prev_virt);
 void riscv_ctr_clear(CPURISCVState *env);
 
 void riscv_translate_init(void);
-void riscv_translate_code(CPUState *cs, TranslationBlock *tb,
-                          int *max_insns, vaddr pc, void *host_pc);
+void riscv_translate_code(CPUState *cs, TranslationBlock *tb, int *max_insns,
+                          vaddr pc, void *host_pc);
 
 G_NORETURN void riscv_raise_exception(CPURISCVState *env,
-                                      RISCVException exception,
-                                      uintptr_t pc);
+                                      RISCVException exception, uintptr_t pc);
 
 target_ulong riscv_cpu_get_fflags(CPURISCVState *env);
 void riscv_cpu_set_fflags(CPURISCVState *env, target_ulong);
@@ -723,115 +725,104 @@ FIELD(TB_FLAGS, PM_PMM, 29, 2)
 FIELD(TB_FLAGS, PM_SIGNEXTEND, 31, 1)
 
 #ifdef TARGET_RISCV32
-#define riscv_cpu_mxl(env)  ((void)(env), MXL_RV32)
+#define riscv_cpu_mxl(env) ((void)(env), MXL_RV32)
 #else
-static inline RISCVMXL riscv_cpu_mxl(CPURISCVState *env)
-{
-    return env->misa_mxl;
+static inline RISCVMXL riscv_cpu_mxl(CPURISCVState *env) {
+  return env->misa_mxl;
 }
 #endif
 #define riscv_cpu_mxl_bits(env) (1UL << (4 + riscv_cpu_mxl(env)))
 
-static inline const RISCVCPUConfig *riscv_cpu_cfg(CPURISCVState *env)
-{
-    return &env_archcpu(env)->cfg;
+static inline const RISCVCPUConfig *riscv_cpu_cfg(CPURISCVState *env) {
+  return &env_archcpu(env)->cfg;
 }
 
 #if !defined(CONFIG_USER_ONLY)
-static inline int cpu_address_mode(CPURISCVState *env)
-{
-    int mode = env->priv;
+static inline int cpu_address_mode(CPURISCVState *env) {
+  int mode = env->priv;
 
-    if (mode == PRV_M && get_field(env->mstatus, MSTATUS_MPRV)) {
-        mode = get_field(env->mstatus, MSTATUS_MPP);
-    }
-    return mode;
+  if (mode == PRV_M && get_field(env->mstatus, MSTATUS_MPRV)) {
+    mode = get_field(env->mstatus, MSTATUS_MPP);
+  }
+  return mode;
 }
 
-static inline RISCVMXL cpu_get_xl(CPURISCVState *env, target_ulong mode)
-{
-    RISCVMXL xl = env->misa_mxl;
-    /*
-     * When emulating a 32-bit-only cpu, use RV32.
-     * When emulating a 64-bit cpu, and MXL has been reduced to RV32,
-     * MSTATUSH doesn't have UXL/SXL, therefore XLEN cannot be widened
-     * back to RV64 for lower privs.
-     */
-    if (xl != MXL_RV32) {
-        switch (mode) {
-        case PRV_M:
-            break;
-        case PRV_U:
-            xl = get_field(env->mstatus, MSTATUS64_UXL);
-            break;
-        default: /* PRV_S */
-            xl = get_field(env->mstatus, MSTATUS64_SXL);
-            break;
-        }
+static inline RISCVMXL cpu_get_xl(CPURISCVState *env, target_ulong mode) {
+  RISCVMXL xl = env->misa_mxl;
+  /*
+   * When emulating a 32-bit-only cpu, use RV32.
+   * When emulating a 64-bit cpu, and MXL has been reduced to RV32,
+   * MSTATUSH doesn't have UXL/SXL, therefore XLEN cannot be widened
+   * back to RV64 for lower privs.
+   */
+  if (xl != MXL_RV32) {
+    switch (mode) {
+    case PRV_M:
+      break;
+    case PRV_U:
+      xl = get_field(env->mstatus, MSTATUS64_UXL);
+      break;
+    default: /* PRV_S */
+      xl = get_field(env->mstatus, MSTATUS64_SXL);
+      break;
     }
-    return xl;
+  }
+  return xl;
 }
 #endif
 
 #if defined(TARGET_RISCV32)
-#define cpu_recompute_xl(env)  ((void)(env), MXL_RV32)
+#define cpu_recompute_xl(env) ((void)(env), MXL_RV32)
 #else
-static inline RISCVMXL cpu_recompute_xl(CPURISCVState *env)
-{
+static inline RISCVMXL cpu_recompute_xl(CPURISCVState *env) {
 #if !defined(CONFIG_USER_ONLY)
-    return cpu_get_xl(env, env->priv);
+  return cpu_get_xl(env, env->priv);
 #else
-    return env->misa_mxl;
+  return env->misa_mxl;
 #endif
 }
 #endif
 
 #if defined(TARGET_RISCV32)
-#define cpu_address_xl(env)  ((void)(env), MXL_RV32)
+#define cpu_address_xl(env) ((void)(env), MXL_RV32)
 #else
-static inline RISCVMXL cpu_address_xl(CPURISCVState *env)
-{
+static inline RISCVMXL cpu_address_xl(CPURISCVState *env) {
 #ifdef CONFIG_USER_ONLY
-    return env->xl;
+  return env->xl;
 #else
-    int mode = cpu_address_mode(env);
+  int mode = cpu_address_mode(env);
 
-    return cpu_get_xl(env, mode);
+  return cpu_get_xl(env, mode);
 #endif
 }
 #endif
 
-static inline int riscv_cpu_xlen(CPURISCVState *env)
-{
-    return 16 << env->xl;
-}
+static inline int riscv_cpu_xlen(CPURISCVState *env) { return 16 << env->xl; }
 
 #ifdef TARGET_RISCV32
-#define riscv_cpu_sxl(env)  ((void)(env), MXL_RV32)
+#define riscv_cpu_sxl(env) ((void)(env), MXL_RV32)
 #else
-static inline RISCVMXL riscv_cpu_sxl(CPURISCVState *env)
-{
+static inline RISCVMXL riscv_cpu_sxl(CPURISCVState *env) {
 #ifdef CONFIG_USER_ONLY
-    return env->misa_mxl;
+  return env->misa_mxl;
 #else
-    if (env->misa_mxl != MXL_RV32) {
-        return get_field(env->mstatus, MSTATUS64_SXL);
-    }
+  if (env->misa_mxl != MXL_RV32) {
+    return get_field(env->mstatus, MSTATUS64_SXL);
+  }
 #endif
-    return MXL_RV32;
+  return MXL_RV32;
 }
 #endif
 
 static inline bool riscv_cpu_allow_16bit_insn(const RISCVCPUConfig *cfg,
                                               target_long priv_ver,
-                                              uint32_t misa_ext)
-{
-    /* In priv spec version 1.12 or newer, C always implies Zca */
-    if (priv_ver >= PRIV_VERSION_1_12_0) {
-        return cfg->ext_zca;
-    } else {
-        return misa_ext & RVC;
-    }
+                                              uint32_t misa_ext) {
+  /* In priv spec version 1.12 or newer, C always implies Zca */
+  if (priv_ver >= PRIV_VERSION_1_12_0) {
+    return cfg->ext_zca;
+  } else {
+    return misa_ext & RVC;
+  }
 }
 
 /*
@@ -853,16 +844,15 @@ static inline bool riscv_cpu_allow_16bit_insn(const RISCVCPUConfig *cfg,
  *               = 2
  */
 static inline uint32_t vext_get_vlmax(uint32_t vlenb, uint32_t vsew,
-                                      int8_t lmul)
-{
-    uint32_t vlen = vlenb << 3;
+                                      int8_t lmul) {
+  uint32_t vlen = vlenb << 3;
 
-    /*
-     * We need to use 'vlen' instead of 'vlenb' to
-     * preserve the '+ 3' in the formula. Otherwise
-     * we risk a negative shift if vsew < lmul.
-     */
-    return vlen >> (vsew + 3 - lmul);
+  /*
+   * We need to use 'vlen' instead of 'vlenb' to
+   * preserve the '+ 3' in the formula. Otherwise
+   * we risk a negative shift if vsew < lmul.
+   */
+  return vlen >> (vsew + 3 - lmul);
 }
 
 bool riscv_cpu_is_32bit(RISCVCPU *cpu);
@@ -884,20 +874,17 @@ RISCVException riscv_csrrw_debug(CPURISCVState *env, int csrno,
                                  target_ulong write_mask);
 
 static inline void riscv_csr_write(CPURISCVState *env, int csrno,
-                                   target_ulong val)
-{
-    riscv_csrrw(env, csrno, NULL, val, MAKE_64BIT_MASK(0, TARGET_LONG_BITS), 0);
+                                   target_ulong val) {
+  riscv_csrrw(env, csrno, NULL, val, MAKE_64BIT_MASK(0, TARGET_LONG_BITS), 0);
 }
 
-static inline target_ulong riscv_csr_read(CPURISCVState *env, int csrno)
-{
-    target_ulong val = 0;
-    riscv_csrr(env, csrno, &val);
-    return val;
+static inline target_ulong riscv_csr_read(CPURISCVState *env, int csrno) {
+  target_ulong val = 0;
+  riscv_csrr(env, csrno, &val);
+  return val;
 }
 
-typedef RISCVException (*riscv_csr_predicate_fn)(CPURISCVState *env,
-                                                 int csrno);
+typedef RISCVException (*riscv_csr_predicate_fn)(CPURISCVState *env, int csrno);
 typedef RISCVException (*riscv_csr_read_fn)(CPURISCVState *env, int csrno,
                                             target_ulong *ret_value);
 typedef RISCVException (*riscv_csr_write_fn)(CPURISCVState *env, int csrno,
@@ -917,30 +904,28 @@ RISCVException riscv_csrrw_i128(CPURISCVState *env, int csrno,
 typedef RISCVException (*riscv_csr_read128_fn)(CPURISCVState *env, int csrno,
                                                Int128 *ret_value);
 typedef RISCVException (*riscv_csr_write128_fn)(CPURISCVState *env, int csrno,
-                                             Int128 new_value);
+                                                Int128 new_value);
 
 typedef struct {
-    const char *name;
-    riscv_csr_predicate_fn predicate;
-    riscv_csr_read_fn read;
-    riscv_csr_write_fn write;
-    riscv_csr_op_fn op;
-    riscv_csr_read128_fn read128;
-    riscv_csr_write128_fn write128;
-    /* The default priv spec version should be PRIV_VERSION_1_10_0 (i.e 0) */
-    uint32_t min_priv_ver;
+  const char *name;
+  riscv_csr_predicate_fn predicate;
+  riscv_csr_read_fn read;
+  riscv_csr_write_fn write;
+  riscv_csr_op_fn op;
+  riscv_csr_read128_fn read128;
+  riscv_csr_write128_fn write128;
+  /* The default priv spec version should be PRIV_VERSION_1_10_0 (i.e 0) */
+  uint32_t min_priv_ver;
 } riscv_csr_operations;
 
 struct RISCVCSR {
-    int csrno;
-    bool (*insertion_test)(RISCVCPU *cpu);
-    riscv_csr_operations csr_ops;
+  int csrno;
+  bool (*insertion_test)(RISCVCPU *cpu);
+  riscv_csr_operations csr_ops;
 };
 
 /* CSR function table constants */
-enum {
-    CSR_TABLE_SIZE = 0x1000
-};
+enum { CSR_TABLE_SIZE = 0x1000 };
 
 /*
  * The event id are encoded based on the encoding specified in the
@@ -948,11 +933,11 @@ enum {
  */
 
 enum riscv_pmu_event_idx {
-    RISCV_PMU_EVENT_HW_CPU_CYCLES = 0x01,
-    RISCV_PMU_EVENT_HW_INSTRUCTIONS = 0x02,
-    RISCV_PMU_EVENT_CACHE_DTLB_READ_MISS = 0x10019,
-    RISCV_PMU_EVENT_CACHE_DTLB_WRITE_MISS = 0x1001B,
-    RISCV_PMU_EVENT_CACHE_ITLB_PREFETCH_MISS = 0x10021,
+  RISCV_PMU_EVENT_HW_CPU_CYCLES = 0x01,
+  RISCV_PMU_EVENT_HW_INSTRUCTIONS = 0x02,
+  RISCV_PMU_EVENT_CACHE_DTLB_READ_MISS = 0x10019,
+  RISCV_PMU_EVENT_CACHE_DTLB_WRITE_MISS = 0x1001B,
+  RISCV_PMU_EVENT_CACHE_ITLB_PREFETCH_MISS = 0x10021,
 };
 
 /* used by tcg/tcg-cpu.c*/
@@ -962,9 +947,9 @@ void riscv_cpu_set_misa_ext(CPURISCVState *env, uint32_t ext);
 bool riscv_cpu_is_vendor(Object *cpu_obj);
 
 typedef struct RISCVCPUMultiExtConfig {
-    const char *name;
-    uint32_t offset;
-    bool enabled;
+  const char *name;
+  uint32_t offset;
+  bool enabled;
 } RISCVCPUMultiExtConfig;
 
 extern const RISCVCPUMultiExtConfig riscv_cpu_extensions[];
@@ -973,9 +958,9 @@ extern const RISCVCPUMultiExtConfig riscv_cpu_experimental_exts[];
 extern const RISCVCPUMultiExtConfig riscv_cpu_named_features[];
 
 typedef struct isa_ext_data {
-    const char *name;
-    int min_version;
-    int ext_enable_offset;
+  const char *name;
+  int min_version;
+  int ext_enable_offset;
 } RISCVIsaExtData;
 extern const RISCVIsaExtData isa_edata_arr[];
 char *riscv_cpu_get_name(RISCVCPU *cpu);
