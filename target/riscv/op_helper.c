@@ -366,6 +366,17 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
   if (env->sb.log_interactions) {
     /* qemu_log("SB_WRITE: pc=0x" TARGET_FMT_lx " addr=0x" TARGET_FMT_lx "
      * val=0x" TARGET_FMT_lx "\n", pc, addr, val); */
+    if (riscv_sb_log_file) {
+#ifndef CONFIG_USER_ONLY
+      uint64_t core_id = env->mhartid;
+#else
+      uint64_t core_id = 0; // Default for user-mode
+#endif
+      fprintf(riscv_sb_log_file,
+              "%lu,0x" TARGET_FMT_lx ",Store,0x" TARGET_FMT_lx
+              ",0x" TARGET_FMT_lx ",-,%d\n",
+              core_id, pc, addr, val, size);
+    }
   }
 }
 
@@ -395,6 +406,19 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
         }
         if (env->sb.log_interactions) {
           /* qemu_log("SB_FWD: Hit addr=0x" TARGET_FMT_lx "\n", addr); */
+          if (riscv_sb_log_file) {
+#ifndef CONFIG_USER_ONLY
+            uint64_t core_id = env->mhartid;
+#else
+            uint64_t core_id = 0;
+#endif
+            /* We don't have PC here easily unless passed, assuming 0 or add PC
+             * argument to helper_sb_read later */
+            fprintf(riscv_sb_log_file,
+                    "%" PRIu64 ",0,LoadHit,0x" TARGET_FMT_lx ",0x" TARGET_FMT_lx
+                    ",1,%d\n",
+                    core_id, addr, e->data, size);
+          }
         }
         return e->data;
       }

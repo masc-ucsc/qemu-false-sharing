@@ -216,6 +216,7 @@ typedef struct PMUFixedCtrState {
 extern int riscv_sb_global_limit;
 extern bool riscv_sb_global_false_sharing;
 extern bool riscv_sb_global_deadlock;
+extern FILE *riscv_sb_log_file;
 
 #define MAX_SB_SIZE 256
 

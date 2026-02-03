@@ -761,6 +761,15 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
       /* Initialize Statistics Hashmap */
       env->sb.stats =
           g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
+
+      /* Initialize Global Log File (once) */
+      if (!riscv_sb_log_file) {
+        riscv_sb_log_file = fopen("instruction_log.txt", "w");
+        if (riscv_sb_log_file) {
+          fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit\n");
+        }
+      }
+
       /* Register exit handler once */
       static bool exit_handler_registered = false;
       if (!exit_handler_registered) {
@@ -768,7 +777,6 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
         /* qemu_add_exit_notifier needs a Notifier*. Let's actually use atexit
          * for simplicity in this context or create a Notifier */
         // qemu_add_exit_notifier is cleaner but needs struct.
-        atexit(riscv_sb_dump_stats);
         exit_handler_registered = true;
       }
 
@@ -789,9 +797,10 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
 }
 
 /* Global Store Buffer Configuration (Defaults) */
-int riscv_sb_global_limit = 256;
+int riscv_sb_global_limit = 0;
 bool riscv_sb_global_false_sharing = false;
 bool riscv_sb_global_deadlock = false;
+FILE *riscv_sb_log_file = NULL;
 
 static void riscv_cpu_disas_set_info(CPUState *s, disassemble_info *info) {
   RISCVCPU *cpu = RISCV_CPU(s);
@@ -3082,7 +3091,11 @@ static void riscv_sb_dump_stats(void) {
    */
 
   // Create log file
-  FILE *log_file = fopen("instruction_log.txt", "w");
+  FILE *log_file = riscv_sb_log_file;
+  if (!log_file) {
+    // If not open (e.g. SB disabled), try open now
+    log_file = fopen("instruction_log.txt", "w");
+  }
   if (!log_file)
     return;
 
@@ -3114,5 +3127,7 @@ static void riscv_sb_dump_stats(void) {
       }
     }
   }
-  fclose(log_file);
+  if (log_file != stdout && log_file != stderr) {
+    fclose(log_file);
+  }
 }
