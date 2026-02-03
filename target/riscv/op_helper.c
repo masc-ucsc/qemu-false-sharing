@@ -18,6 +18,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "accel/tcg/cpu-ldst.h"
 #include "accel/tcg/probe.h"
 #include "cpu.h"
@@ -25,7 +26,6 @@
 #include "exec/helper-proto.h"
 #include "exec/tlb-flags.h"
 #include "internals.h"
-#include "qemu/osdep.h"
 #include "trace.h"
 
 #ifndef CONFIG_USER_ONLY
@@ -263,35 +263,6 @@ void helper_cbo_inval(CPURISCVState *env, target_ulong address) {
 
 /* Store Buffer Implementation */
 
-void helper_sb_flush(CPURISCVState *env) {
-  int i;
-  int idx = env->sb.head;
-  uintptr_t ra = GETPC();
-  int mmu_idx = riscv_env_mmu_index(env, false);
-
-  for (i = 0; i < env->sb.count; i++) {
-    SBEntry *e = &env->sb.buffer[idx];
-
-    switch (e->size) {
-    case 1:
-      cpu_stb_mmuidx_ra(env, e->addr, e->data, mmu_idx, ra);
-      break;
-    case 2:
-      cpu_stw_mmuidx_ra(env, e->addr, e->data, mmu_idx, ra);
-      break;
-    case 4:
-      cpu_stl_mmuidx_ra(env, e->addr, e->data, mmu_idx, ra);
-      break;
-    case 8:
-      cpu_stq_mmuidx_ra(env, e->addr, e->data, mmu_idx, ra);
-      break;
-    default:
-      break;
-    }
-
-    idx = (idx + 1) % MAX_SB_SIZE;
-  }
-
   void helper_sb_flush(CPURISCVState * env, target_ulong pc) {
     int i;
     int idx = env->sb.head;
@@ -405,9 +376,9 @@ void helper_sb_flush(CPURISCVState *env) {
     int mmu_idx = riscv_env_mmu_index(env, false);
     switch (size) {
     case 1:
-      return cpu_ldb_mmuidx_ra(env, addr, mmu_idx, ra);
+      return cpu_ldub_mmuidx_ra(env, addr, mmu_idx, ra);
     case 2:
-      return cpu_ldw_mmuidx_ra(env, addr, mmu_idx, ra);
+      return cpu_lduw_mmuidx_ra(env, addr, mmu_idx, ra);
     case 4:
       return cpu_ldl_mmuidx_ra(env, addr, mmu_idx, ra);
     case 8:

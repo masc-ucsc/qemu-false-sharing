@@ -212,6 +212,30 @@ typedef struct PMUFixedCtrState {
   uint64_t counter_virt_prev[2];
 } PMUFixedCtrState;
 
+#define MAX_SB_SIZE 256
+
+typedef struct {
+  uint64_t addr;
+  uint64_t data;
+  int size; // 1, 2, 4, 8 bytes
+} SBEntry;
+
+typedef struct {
+  SBEntry *buffer; // Dynamic allocation
+  int capacity;    // Max entries
+  int head;        // Oldest
+  int tail;        // Newest
+  int count;
+  bool enabled;
+  bool log_interactions;
+  bool detect_deadlocks;
+} RISCVStoreBuffer;
+
+/* Global Store Buffer Configuration (set by CLI) */
+extern int riscv_sb_global_limit;
+extern bool riscv_sb_global_false_sharing;
+extern bool riscv_sb_global_deadlock;
+
 struct CPUArchState {
   target_ulong gpr[32];
   target_ulong gprh[32]; /* 64 top bits of the 128-bit registers */
@@ -262,31 +286,7 @@ struct CPUArchState {
   /* sw check code for sw check exception */
   target_ulong sw_check_code;
 
-#define MAX_SB_SIZE 256
-
-  typedef struct {
-    uint64_t addr;
-    uint64_t data;
-    int size; // 1, 2, 4, 8 bytes
-  } SBEntry;
-
-  typedef struct {
-    SBEntry *buffer; // Dynamic allocation
-    int capacity;    // Max entries
-    int head;        // Oldest
-    int tail;        // Newest
-    int count;
-    bool enabled;
-    bool log_interactions;
-    bool detect_deadlocks;
-  } RISCVStoreBuffer;
-
   RISCVStoreBuffer sb;
-
-  /* Global properties for dynamic usage (set by CLI) */
-  extern int riscv_sb_global_limit;
-  extern bool riscv_sb_global_false_sharing;
-  extern bool riscv_sb_global_deadlock;
 
 #ifdef CONFIG_USER_ONLY
   uint32_t elf_flags;

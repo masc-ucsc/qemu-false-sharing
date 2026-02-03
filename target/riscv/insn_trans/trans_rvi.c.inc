@@ -365,7 +365,42 @@ static bool gen_load_tl(DisasContext *ctx, arg_lb *a, MemOp memop)
     TCGv dest = dest_gpr(ctx, a->rd);
     TCGv addr = get_address(ctx, a->rs1, a->imm);
 
-    tcg_gen_qemu_ld_tl(dest, addr, ctx->mem_idx, memop);
+    // tcg_gen_qemu_ld_tl(dest, addr, ctx->mem_idx, memop);
+    // gen_set_gpr(ctx, a->rd, dest);
+    
+    /* Store Buffer Instrumentation */
+    TCGv_i32 size = tcg_constant_i32(1 << (memop & MO_SIZE));
+    gen_helper_sb_read(dest, tcg_env, addr, size);
+
+    /* Handle Sign/Zero Extension manually as helper returns raw bits */
+    switch (memop & MO_SIZE) {
+    case MO_8:
+        if (memop & MO_SIGN) {
+            tcg_gen_ext8s_tl(dest, dest);
+        } else {
+            tcg_gen_ext8u_tl(dest, dest);
+        }
+        break;
+    case MO_16:
+        if (memop & MO_SIGN) {
+            tcg_gen_ext16s_tl(dest, dest);
+        } else {
+            tcg_gen_ext16u_tl(dest, dest);
+        }
+        break;
+    case MO_32:
+        if (memop & MO_SIGN) {
+            tcg_gen_ext32s_tl(dest, dest);
+        } else {
+            tcg_gen_ext32u_tl(dest, dest);
+        }
+        break;
+    case MO_64:
+        break;
+    default:
+        break;
+    }
+
     gen_set_gpr(ctx, a->rd, dest);
     return true;
 }
@@ -478,7 +513,15 @@ static bool gen_store_tl(DisasContext *ctx, arg_sb *a, MemOp memop)
         tcg_gen_mb(TCG_MO_ALL | TCG_BAR_STRL);
     }
 
-    tcg_gen_qemu_st_tl(data, addr, ctx->mem_idx, memop);
+    // tcg_gen_qemu_st_tl(data, addr, ctx->mem_idx, memop);
+    
+    /* Store Buffer Instrumentation */
+    TCGv pc = tcg_temp_new();
+    gen_pc_plus_diff(pc, ctx, 0);
+    TCGv_i32 size = tcg_constant_i32(1 << (memop & MO_SIZE));
+    
+    gen_helper_sb_write(tcg_env, addr, data, size, pc);
+    
     return true;
 }
 
@@ -948,6 +991,12 @@ static bool trans_fence(DisasContext *ctx, arg_fence *a)
 {
     /* FENCE is a full memory barrier. */
     tcg_gen_mb(TCG_MO_ALL | TCG_BAR_SC);
+
+    /* Store Buffer Instrumentation: Explicit Flush on FENCE */
+    TCGv pc = tcg_temp_new();
+    gen_pc_plus_diff(pc, ctx, 0);
+    gen_helper_sb_flush(tcg_env, pc);
+
     return true;
 }
 

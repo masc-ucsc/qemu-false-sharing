@@ -17,6 +17,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "cpu.h"
 #include "cpu_vendorid.h"
 #include "fpu/softfloat-helpers.h"
@@ -30,7 +31,7 @@
 #include "qemu/ctype.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
-#include "qemu/osdep.h"
+
 #include "qemu/qemu-print.h"
 #include "system/device_tree.h"
 #include "system/kvm.h"
@@ -742,10 +743,14 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
 #endif
 
   /* Store Buffer Reset & Dynamic Initialization */
-  env->sb.enabled = (riscv_sb_global_limit > 0);
-  env->sb.log_interactions = riscv_sb_global_false_sharing;
-  env->sb.detect_deadlocks = riscv_sb_global_deadlock;
-  env->sb.capacity = riscv_sb_global_limit > 0 ? riscv_sb_global_limit : 0;
+  env->sb.enabled = (riscv_sb_global_limit > 0) || (cpu->cfg.sb_limit > 0);
+  env->sb.log_interactions =
+      riscv_sb_global_false_sharing || cpu->cfg.sb_false_sharing;
+  env->sb.detect_deadlocks = riscv_sb_global_deadlock || cpu->cfg.sb_deadlock;
+  env->sb.capacity =
+      cpu->cfg.sb_limit > 0
+          ? cpu->cfg.sb_limit
+          : (riscv_sb_global_limit > 0 ? riscv_sb_global_limit : 0);
 
   if (env->sb.enabled) {
     if (!env->sb.buffer) {
@@ -2490,6 +2495,10 @@ static const Property riscv_cpu_properties[] = {
     DEFINE_PROP_UINT64("rnmi-exception-vector", RISCVCPU, env.rnmi_excpvec,
                        DEFAULT_RNMI_EXCPVEC),
 #endif
+
+    DEFINE_PROP_INT32("sb-limit", RISCVCPU, cfg.sb_limit, 0),
+    DEFINE_PROP_BOOL("sb-false-sharing", RISCVCPU, cfg.sb_false_sharing, false),
+    DEFINE_PROP_BOOL("sb-deadlock", RISCVCPU, cfg.sb_deadlock, false),
 
     DEFINE_PROP_BOOL("short-isa-string", RISCVCPU, cfg.short_isa_string, false),
 
