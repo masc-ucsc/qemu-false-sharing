@@ -34,6 +34,7 @@
 #include "qemu/cpu-float.h"
 #include "qemu/int128.h"
 #include "qom/object.h"
+#include <stdint.h>
 
 typedef struct CPUArchState CPURISCVState;
 
@@ -212,6 +213,10 @@ typedef struct PMUFixedCtrState {
   uint64_t counter_virt_prev[2];
 } PMUFixedCtrState;
 
+extern int riscv_sb_global_limit;
+extern bool riscv_sb_global_false_sharing;
+extern bool riscv_sb_global_deadlock;
+
 #define MAX_SB_SIZE 256
 
 typedef struct {
@@ -229,12 +234,8 @@ typedef struct {
   bool enabled;
   bool log_interactions;
   bool detect_deadlocks;
+  GHashTable *stats;
 } RISCVStoreBuffer;
-
-/* Global Store Buffer Configuration (set by CLI) */
-extern int riscv_sb_global_limit;
-extern bool riscv_sb_global_false_sharing;
-extern bool riscv_sb_global_deadlock;
 
 struct CPUArchState {
   target_ulong gpr[32];

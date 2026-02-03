@@ -1,3 +1,4 @@
+#include "qemu/osdep.h"
 /*
  * QEMU RISC-V CPU
  *
@@ -17,7 +18,6 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "qemu/osdep.h"
 #include "cpu.h"
 #include "cpu_vendorid.h"
 #include "fpu/softfloat-helpers.h"
@@ -31,6 +31,7 @@
 #include "qemu/ctype.h"
 #include "qemu/error-report.h"
 #include "qemu/log.h"
+#include "qemu/osdep.h"
 
 #include "qemu/qemu-print.h"
 #include "system/device_tree.h"
@@ -593,6 +594,8 @@ static void riscv_cpu_dump_state(CPUState *cs, FILE *f, int flags) {
   }
 }
 
+static void riscv_sb_dump_stats(void);
+
 static void riscv_cpu_set_pc(CPUState *cs, vaddr value) {
   RISCVCPU *cpu = RISCV_CPU(cs);
   CPURISCVState *env = &cpu->env;
@@ -755,10 +758,28 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
   if (env->sb.enabled) {
     if (!env->sb.buffer) {
       env->sb.buffer = g_malloc0(env->sb.capacity * sizeof(SBEntry));
+      /* Initialize Statistics Hashmap */
+      env->sb.stats =
+          g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
+      /* Register exit handler once */
+      static bool exit_handler_registered = false;
+      if (!exit_handler_registered) {
+        atexit(riscv_sb_dump_stats);
+        /* qemu_add_exit_notifier needs a Notifier*. Let's actually use atexit
+         * for simplicity in this context or create a Notifier */
+        // qemu_add_exit_notifier is cleaner but needs struct.
+        atexit(riscv_sb_dump_stats);
+        exit_handler_registered = true;
+      }
+
     } else {
       /* Re-allocate if size changed? For now assume size is constant once set
        */
       memset(env->sb.buffer, 0, env->sb.capacity * sizeof(SBEntry));
+      /* Clear stats on reset */
+      if (env->sb.stats) {
+        g_hash_table_remove_all(env->sb.stats);
+      }
     }
   }
 
@@ -3044,3 +3065,54 @@ static const TypeInfo riscv_cpu_type_infos[] = {
 };
 
 DEFINE_TYPES(riscv_cpu_type_infos)
+
+/* Statistics Dump Implementation */
+typedef struct {
+  uint64_t write_count;
+  uint64_t fwd_count;
+} SBStatsEntry;
+
+static void riscv_sb_dump_stats(void) {
+  /*
+   * We need to access the CPU state. Since we don't have it passed here,
+   * and this is a global dump, we effectively need a way to reach the stats.
+   * BUT, the stats are per-CPU.
+   * For single-core emulation, `first_cpu` works.
+   * For multi-core, we should iterate `cpus`.
+   */
+
+  // Create log file
+  FILE *log_file = fopen("instruction_log.txt", "w");
+  if (!log_file)
+    return;
+
+  fprintf(
+      log_file,
+      "RISC-V Store Buffer Statistics (Cache Line Granularity: 64 bytes)\n");
+  fprintf(
+      log_file,
+      "==================================================================\n");
+
+  CPUState *cpu;
+  CPU_FOREACH(cpu) {
+    CPURISCVState *env = &RISCV_CPU(cpu)->env;
+    if (env->sb.stats) {
+      fprintf(log_file, "CPU %d:\n", cpu->cpu_index);
+
+      GHashTableIter iter;
+      gpointer key, value;
+      g_hash_table_iter_init(&iter, env->sb.stats);
+      while (g_hash_table_iter_next(&iter, &key, &value)) {
+        uint64_t addr = *(uint64_t *)key;
+        SBStatsEntry *stats = (SBStatsEntry *)value;
+        /* Since these are stores in the store buffer, they are effectively
+         * strictly Modified */
+        fprintf(log_file,
+                "CacheLine: 0x%016" PRIx64 " | Writes: %" PRIu64
+                " | FwdHits: %" PRIu64 " | State: Modified (SB)\n",
+                addr, stats->write_count, stats->fwd_count);
+      }
+    }
+  }
+  fclose(log_file);
+}
