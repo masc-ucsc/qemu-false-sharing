@@ -747,11 +747,11 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
 
   /* Store Buffer Reset & Dynamic Initialization */
   env->sb.enabled = (riscv_sb_global_limit > 0) || (cpu->cfg.sb_limit > 0);
-  env->sb.log_interactions = riscv_sb_global_fs_read ||
-                             riscv_sb_global_fs_write ||
+  env->sb.log_interactions = riscv_sb_global_fs_read || cpu->cfg.sb_fs_read ||
+                             riscv_sb_global_fs_write || cpu->cfg.sb_fs_write ||
                              cpu->cfg.sb_false_sharing;
-  env->sb.log_read_sharing = riscv_sb_global_fs_read;
-  env->sb.log_write_sharing = riscv_sb_global_fs_write;
+  env->sb.log_read_sharing = riscv_sb_global_fs_read || cpu->cfg.sb_fs_read;
+  env->sb.log_write_sharing = riscv_sb_global_fs_write || cpu->cfg.sb_fs_write;
   env->sb.detect_deadlocks = riscv_sb_global_deadlock || cpu->cfg.sb_deadlock;
   env->sb.capacity =
       cpu->cfg.sb_limit > 0
@@ -2532,6 +2532,9 @@ static const Property riscv_cpu_properties[] = {
 
     DEFINE_PROP_INT32("sb-limit", RISCVCPU, cfg.sb_limit, 0),
     DEFINE_PROP_BOOL("sb-false-sharing", RISCVCPU, cfg.sb_false_sharing, false),
+    DEFINE_PROP_BOOL("sb-false-sharing-read", RISCVCPU, cfg.sb_fs_read, false),
+    DEFINE_PROP_BOOL("sb-false-sharing-write", RISCVCPU, cfg.sb_fs_write,
+                     false),
     DEFINE_PROP_BOOL("sb-deadlock", RISCVCPU, cfg.sb_deadlock, false),
 
     DEFINE_PROP_BOOL("short-isa-string", RISCVCPU, cfg.short_isa_string, false),

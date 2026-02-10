@@ -27,6 +27,8 @@ struct RISCVCPUConfig {
 #include "cpu_cfg_fields.h.inc"
   int sb_limit;
   bool sb_false_sharing;
+  bool sb_fs_read;
+  bool sb_fs_write;
   bool sb_deadlock;
 };
 
