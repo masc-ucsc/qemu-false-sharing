@@ -747,8 +747,11 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
 
   /* Store Buffer Reset & Dynamic Initialization */
   env->sb.enabled = (riscv_sb_global_limit > 0) || (cpu->cfg.sb_limit > 0);
-  env->sb.log_interactions =
-      riscv_sb_global_false_sharing || cpu->cfg.sb_false_sharing;
+  env->sb.log_interactions = riscv_sb_global_fs_read ||
+                             riscv_sb_global_fs_write ||
+                             cpu->cfg.sb_false_sharing;
+  env->sb.log_read_sharing = riscv_sb_global_fs_read;
+  env->sb.log_write_sharing = riscv_sb_global_fs_write;
   env->sb.detect_deadlocks = riscv_sb_global_deadlock || cpu->cfg.sb_deadlock;
   env->sb.capacity =
       cpu->cfg.sb_limit > 0
@@ -798,7 +801,8 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
 
 /* Global Store Buffer Configuration (Defaults) */
 int riscv_sb_global_limit = 0;
-bool riscv_sb_global_false_sharing = false;
+bool riscv_sb_global_fs_read = false;
+bool riscv_sb_global_fs_write = false;
 bool riscv_sb_global_deadlock = false;
 FILE *riscv_sb_log_file = NULL;
 

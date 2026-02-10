@@ -17,10 +17,10 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "qemu/osdep.h"
 #include "qemu-version.h"
 #include "qemu/accel.h"
 #include "qemu/help-texts.h"
+#include "qemu/osdep.h"
 #include "qemu/units.h"
 #include <linux/binfmts.h>
 #include <sys/resource.h>
@@ -406,15 +406,20 @@ static void handle_arg_jitdump(const char *arg) { perf_enable_jitdump(); }
 #if defined(TARGET_RISCV)
 /* RISC-V Store Buffer Globals (declared in target/riscv/cpu.c) */
 extern int riscv_sb_global_limit;
-extern bool riscv_sb_global_false_sharing;
+extern bool riscv_sb_global_fs_read;
+extern bool riscv_sb_global_fs_write;
 extern bool riscv_sb_global_deadlock;
 
 static void handle_arg_buffer_size(const char *arg) {
   riscv_sb_global_limit = atoi(arg);
 }
 
-static void handle_arg_false_sharing(const char *arg) {
-  riscv_sb_global_false_sharing = true;
+static void handle_arg_false_sharing_read(const char *arg) {
+  riscv_sb_global_fs_read = true;
+}
+
+static void handle_arg_false_sharing_write(const char *arg) {
+  riscv_sb_global_fs_write = true;
 }
 
 static void handle_arg_deadlock_detector(const char *arg) {
@@ -498,8 +503,12 @@ static const struct qemu_argument arg_table[] = {
 #if defined(TARGET_RISCV)
     {"buffer-size", "QEMU_RISCV_SB_SIZE", true, handle_arg_buffer_size, "size",
      "[RISC-V] Store Buffer Size (capacity)"},
-    {"false-sharing", "QEMU_RISCV_SB_FS", false, handle_arg_false_sharing, "",
-     "[RISC-V] Enable False Sharing / Interaction Logging"},
+    {"false-sharing-read", "QEMU_RISCV_SB_FS_READ", false,
+     handle_arg_false_sharing_read, "",
+     "[RISC-V] Enable False Sharing Detection (Read-Write Conflicts)"},
+    {"false-sharing-write", "QEMU_RISCV_SB_FS_WRITE", false,
+     handle_arg_false_sharing_write, "",
+     "[RISC-V] Enable False Sharing Detection (Write-Write Conflicts)"},
     {"deadlock-detector", "QEMU_RISCV_SB_DD", false,
      handle_arg_deadlock_detector, "", "[RISC-V] Enable Deadlock Detection"},
 #endif

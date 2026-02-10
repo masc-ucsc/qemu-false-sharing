@@ -214,7 +214,8 @@ typedef struct PMUFixedCtrState {
 } PMUFixedCtrState;
 
 extern int riscv_sb_global_limit;
-extern bool riscv_sb_global_false_sharing;
+extern bool riscv_sb_global_fs_read;
+extern bool riscv_sb_global_fs_write;
 extern bool riscv_sb_global_deadlock;
 extern FILE *riscv_sb_log_file;
 
@@ -234,6 +235,8 @@ typedef struct {
   int count;
   bool enabled;
   bool log_interactions;
+  bool log_read_sharing;  // Track read-write conflicts
+  bool log_write_sharing; // Track write-write conflicts
   bool detect_deadlocks;
   GHashTable *stats;
 } RISCVStoreBuffer;
