@@ -123,10 +123,8 @@ DEF_HELPER_2(cbo_zero, void, env, tl)
 
 /* Store Buffer helpers */
 DEF_HELPER_5(sb_write, void, env, tl, tl, i32, tl) // ..., pc
-DEF_HELPER_3(sb_read, tl, env, tl,
-             i32) // Read does not strictly need PC for functional correctness,
-                  // but maybe for logging? User said SBWrite/SBFlush. Read is
-                  // implicit. Let's keep read simple unless specified.
+DEF_HELPER_4(sb_read, tl, env, tl, i32,
+             tl)                      // ..., pc (for source reporting)
 DEF_HELPER_2(sb_flush, void, env, tl) // ..., pc
 
 /* Special functions */

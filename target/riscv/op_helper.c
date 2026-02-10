@@ -363,9 +363,13 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
     entry->write_count++;
   }
 
-  if (env->sb.log_interactions) {
-    /* qemu_log("SB_WRITE: pc=0x" TARGET_FMT_lx " addr=0x" TARGET_FMT_lx "
-     * val=0x" TARGET_FMT_lx "\n", pc, addr, val); */
+  bool log_store = env->sb.log_interactions;
+  /* If specific flags are set, only log if relevant */
+  if (env->sb.log_write_sharing) {
+    log_store = true;
+  }
+
+  if (log_store) {
     if (riscv_sb_log_file) {
 #ifndef CONFIG_USER_ONLY
       uint64_t core_id = env->mhartid;
@@ -381,7 +385,7 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
 }
 
 target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
-                            uint32_t size) {
+                            uint32_t size, target_ulong pc) {
   // Check Store Buffer for forwarding (youngest to oldest)
   if (env->sb.enabled && env->sb.count > 0) {
     int idx = (env->sb.tail - 1 + env->sb.capacity) % env->sb.capacity;
@@ -404,20 +408,22 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
           }
           entry->fwd_count++;
         }
-        if (env->sb.log_interactions) {
-          /* qemu_log("SB_FWD: Hit addr=0x" TARGET_FMT_lx "\n", addr); */
+        bool log_load = env->sb.log_interactions;
+        if (env->sb.log_read_sharing) {
+          log_load = true;
+        }
+
+        if (log_load) {
           if (riscv_sb_log_file) {
 #ifndef CONFIG_USER_ONLY
             uint64_t core_id = env->mhartid;
 #else
             uint64_t core_id = 0;
 #endif
-            /* We don't have PC here easily unless passed, assuming 0 or add PC
-             * argument to helper_sb_read later */
             fprintf(riscv_sb_log_file,
-                    "%" PRIu64 ",0,LoadHit,0x" TARGET_FMT_lx ",0x" TARGET_FMT_lx
-                    ",1,%d\n",
-                    core_id, addr, e->data, size);
+                    "%" PRIu64 ",0x" TARGET_FMT_lx ",LoadHit,0x" TARGET_FMT_lx
+                    ",0x" TARGET_FMT_lx ",1,%d\n",
+                    core_id, pc, addr, e->data, size);
           }
         }
         return e->data;

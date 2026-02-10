@@ -370,7 +370,8 @@ static bool gen_load_tl(DisasContext *ctx, arg_lb *a, MemOp memop)
     
     /* Store Buffer Instrumentation */
     TCGv_i32 size = tcg_constant_i32(1 << (memop & MO_SIZE));
-    gen_helper_sb_read(dest, tcg_env, addr, size);
+    TCGv pc = tcg_constant_tl(ctx->base.pc_next);
+    gen_helper_sb_read(dest, tcg_env, addr, size, pc);
 
     /* Handle Sign/Zero Extension manually as helper returns raw bits */
     switch (memop & MO_SIZE) {
