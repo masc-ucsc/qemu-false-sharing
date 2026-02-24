@@ -1,6 +1,8 @@
 FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y \
+RUN mkdir -p /tmp/apt-archives/partial && \
+    apt-get update && \
+    apt-get -o dir::cache::archives=/tmp/apt-archives install -y --no-install-recommends \
     build-essential \
     ninja-build \
     pkg-config \
@@ -14,7 +16,7 @@ RUN apt-get update && apt-get install -y \
     g++-riscv64-linux-gnu \
     binutils-riscv64-linux-gnu \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/apt-archives
 
 WORKDIR /qemu
 
