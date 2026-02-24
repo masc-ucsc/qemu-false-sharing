@@ -1162,6 +1162,31 @@ static bool gen_amo(DisasContext *ctx, arg_atomic *a,
     return true;
 }
 
+static bool gen_amoswap(DisasContext *ctx, arg_atomic *a, MemOp mop)
+{
+    TCGv dest = dest_gpr(ctx, a->rd);
+    TCGv src1, src2 = get_gpr(ctx, a->rs2, EXT_NONE);
+    MemOp size = mop & MO_SIZE;
+
+    mop |= mo_endian(ctx);
+    if (ctx->cfg_ptr->ext_zama16b && size >= MO_32) {
+        mop |= MO_ATOM_WITHIN16;
+    } else {
+        mop |= MO_ALIGN;
+    }
+
+    decode_save_opc(ctx, RISCV_UW2_ALWAYS_STORE_AMO);
+    src1 = get_address(ctx, a->rs1, 0);
+    tcg_gen_atomic_xchg_tl(dest, src1, src2, ctx->mem_idx, mop);
+
+    TCGv_i32 size_i32 = tcg_constant_i32(1 << (mop & MO_SIZE));
+    TCGv pc = tcg_constant_tl(ctx->base.pc_next);
+    gen_helper_sb_amo_lock(tcg_env, src1, src2, dest, size_i32, pc);
+
+    gen_set_gpr(ctx, a->rd, dest);
+    return true;
+}
+
 static bool gen_cmpxchg(DisasContext *ctx, arg_atomic *a, MemOp mop)
 {
     TCGv dest = get_gpr(ctx, a->rd, EXT_NONE);

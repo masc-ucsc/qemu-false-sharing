@@ -126,6 +126,7 @@ DEF_HELPER_5(sb_write, void, env, tl, tl, i32, tl) // ..., pc
 DEF_HELPER_4(sb_read, tl, env, tl, i32,
              tl)                      // ..., pc (for source reporting)
 DEF_HELPER_2(sb_flush, void, env, tl) // ..., pc
+DEF_HELPER_6(sb_amo_lock, void, env, tl, tl, tl, i32, tl)
 
 /* Special functions */
 DEF_HELPER_2(csrr, tl, env, int)

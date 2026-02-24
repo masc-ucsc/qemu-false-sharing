@@ -22,10 +22,12 @@
 #include "accel/tcg/cpu-ldst.h"
 #include "accel/tcg/probe.h"
 #include "cpu.h"
+#include "disas/disas.h"
 #include "exec/cputlb.h"
 #include "exec/helper-proto.h"
 #include "exec/tlb-flags.h"
 #include "internals.h"
+#include "qemu/thread.h"
 #include "trace.h"
 
 #ifndef CONFIG_USER_ONLY
@@ -268,6 +270,78 @@ typedef struct {
   uint64_t fwd_count;
 } SBStatsEntry;
 
+typedef struct {
+  uint64_t owner_core;
+  target_ulong owner_pc;
+  uint64_t timestamp_us;
+} SBDeadlockLockInfo;
+
+typedef struct {
+  uint64_t wait_addr;
+  target_ulong wait_pc;
+  uint64_t timestamp_us;
+} SBDeadlockWaitInfo;
+
+static GHashTable *riscv_deadlock_lock_table;
+static GHashTable *riscv_deadlock_wait_table;
+static QemuMutex riscv_deadlock_mutex;
+static gsize riscv_deadlock_init_once;
+
+#ifdef CONFIG_USER_ONLY
+extern char *exec_path;
+#endif
+
+static void riscv_deadlock_init(void) {
+  if (g_once_init_enter(&riscv_deadlock_init_once)) {
+    qemu_mutex_init(&riscv_deadlock_mutex);
+    riscv_deadlock_lock_table =
+        g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
+    riscv_deadlock_wait_table =
+        g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
+    g_once_init_leave(&riscv_deadlock_init_once, 1);
+  }
+}
+
+static inline uint64_t riscv_sb_core_id(CPURISCVState *env) {
+#ifndef CONFIG_USER_ONLY
+  return env->mhartid;
+#else
+  return (uint64_t)env_cpu(env)->cpu_index;
+#endif
+}
+
+static void sb_resolve_pc(char *buf, size_t buflen, target_ulong pc) {
+#ifdef CONFIG_USER_ONLY
+  if (exec_path && exec_path[0]) {
+    char *pc_str = g_strdup_printf("0x%" PRIx64, (uint64_t)pc);
+    char *argv[] = {"addr2line", "-e", exec_path, "-f", "-C", "-p", pc_str, NULL};
+    char *stdout_buf = NULL;
+    char *stderr_buf = NULL;
+    gint status = 0;
+    gboolean ok =
+        g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
+                     &stdout_buf, &stderr_buf, &status, NULL);
+    if (ok && status == 0 && stdout_buf && stdout_buf[0] != '\0') {
+      g_strstrip(stdout_buf);
+      g_strlcpy(buf, stdout_buf, buflen);
+      g_free(stdout_buf);
+      g_free(stderr_buf);
+      g_free(pc_str);
+      return;
+    }
+    g_free(stdout_buf);
+    g_free(stderr_buf);
+    g_free(pc_str);
+  }
+#endif
+  const char *sym = lookup_symbol((uint64_t)pc);
+  if (sym && sym[0]) {
+    g_strlcpy(buf, sym, buflen);
+  } else {
+    g_snprintf(buf, buflen, "??");
+  }
+}
+
 static void do_sb_flush(CPURISCVState *env, target_ulong pc, uintptr_t ra) {
   int i;
   int idx = env->sb.head;
@@ -450,6 +524,113 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
   default:
     return 0;
   }
+}
+
+void helper_sb_amo_lock(CPURISCVState *env, target_ulong addr,
+                        target_ulong new_val, target_ulong old_val,
+                        uint32_t size, target_ulong pc) {
+  if (!env->sb.detect_deadlocks) {
+    return;
+  }
+
+  riscv_deadlock_init();
+  uint64_t core_id = riscv_sb_core_id(env);
+  target_ulong aligned_addr = addr;
+  if (size > 0) {
+    aligned_addr = addr & ~((target_ulong)size - 1);
+  }
+  uint64_t lock_addr = (uint64_t)aligned_addr;
+
+  qemu_mutex_lock(&riscv_deadlock_mutex);
+
+  uint64_t lock_key = lock_addr;
+  uint64_t core_key = core_id;
+
+  if (new_val == 0) {
+    SBDeadlockLockInfo *lock_info =
+        g_hash_table_lookup(riscv_deadlock_lock_table, &lock_key);
+    if (lock_info && lock_info->owner_core == core_id) {
+      g_hash_table_remove(riscv_deadlock_lock_table, &lock_key);
+    }
+    g_hash_table_remove(riscv_deadlock_wait_table, &core_key);
+    qemu_mutex_unlock(&riscv_deadlock_mutex);
+    return;
+  }
+
+  if (old_val == 0) {
+    SBDeadlockLockInfo *lock_info =
+        g_hash_table_lookup(riscv_deadlock_lock_table, &lock_key);
+    if (!lock_info) {
+      uint64_t *new_key = g_new(uint64_t, 1);
+      *new_key = lock_addr;
+      lock_info = g_new0(SBDeadlockLockInfo, 1);
+      g_hash_table_insert(riscv_deadlock_lock_table, new_key, lock_info);
+    }
+    lock_info->owner_core = core_id;
+    lock_info->owner_pc = pc;
+    lock_info->timestamp_us = (uint64_t)g_get_real_time();
+    g_hash_table_remove(riscv_deadlock_wait_table, &core_key);
+    qemu_mutex_unlock(&riscv_deadlock_mutex);
+    return;
+  }
+
+  SBDeadlockWaitInfo *wait_info =
+      g_hash_table_lookup(riscv_deadlock_wait_table, &core_key);
+  if (!wait_info) {
+    uint64_t *wait_key = g_new(uint64_t, 1);
+    *wait_key = core_id;
+    wait_info = g_new0(SBDeadlockWaitInfo, 1);
+    g_hash_table_insert(riscv_deadlock_wait_table, wait_key, wait_info);
+  }
+  wait_info->wait_addr = lock_addr;
+  wait_info->wait_pc = pc;
+  wait_info->timestamp_us = (uint64_t)g_get_real_time();
+
+  SBDeadlockLockInfo *lock_info =
+      g_hash_table_lookup(riscv_deadlock_lock_table, &lock_key);
+  if (!lock_info || lock_info->owner_core == core_id) {
+    qemu_mutex_unlock(&riscv_deadlock_mutex);
+    return;
+  }
+
+  uint64_t holder_core = lock_info->owner_core;
+  uint64_t holder_key = holder_core;
+  SBDeadlockWaitInfo *holder_wait =
+      g_hash_table_lookup(riscv_deadlock_wait_table, &holder_key);
+  if (holder_wait) {
+    uint64_t holder_wait_lock_key = holder_wait->wait_addr;
+    SBDeadlockLockInfo *holder_wait_lock =
+        g_hash_table_lookup(riscv_deadlock_lock_table, &holder_wait_lock_key);
+    if (holder_wait_lock && holder_wait_lock->owner_core == core_id) {
+      char cur_wait_loc[256];
+      char holder_acq_loc[256];
+      char holder_wait_loc[256];
+      char cur_acq_loc[256];
+
+      sb_resolve_pc(cur_wait_loc, sizeof(cur_wait_loc), pc);
+      sb_resolve_pc(holder_acq_loc, sizeof(holder_acq_loc),
+                    lock_info->owner_pc);
+      sb_resolve_pc(holder_wait_loc, sizeof(holder_wait_loc),
+                    holder_wait->wait_pc);
+      sb_resolve_pc(cur_acq_loc, sizeof(cur_acq_loc),
+                    holder_wait_lock->owner_pc);
+
+      fprintf(stderr,
+              "DEADLOCK: core %" PRIu64 " waits on lock 0x%" PRIx64
+              " at pc 0x" TARGET_FMT_lx " (%s), held by core %" PRIu64
+              " (acquired at pc 0x" TARGET_FMT_lx " (%s)). "
+              "Core %" PRIu64 " waits on lock 0x%" PRIx64
+              " at pc 0x" TARGET_FMT_lx " (%s), held by core %" PRIu64
+              " (acquired at pc 0x" TARGET_FMT_lx " (%s)).\n",
+              core_id, lock_addr, pc, cur_wait_loc, holder_core,
+              lock_info->owner_pc, holder_acq_loc, holder_core,
+              holder_wait->wait_addr, holder_wait->wait_pc, holder_wait_loc,
+              core_id, holder_wait_lock->owner_pc, cur_acq_loc);
+      fflush(stderr);
+    }
+  }
+
+  qemu_mutex_unlock(&riscv_deadlock_mutex);
 }
 
 #ifndef CONFIG_USER_ONLY
