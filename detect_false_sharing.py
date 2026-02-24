@@ -72,7 +72,7 @@ def analyze_log(filename, binary=None, check_read_write=True, check_write_write=
                                     conflict_type = 'Write-Write'
                         last_writer[cache_line] = {'core': core, 'pc': pc_hex}
 
-                    elif op == 'LoadHit':
+                    elif op in ('LoadHit', 'Load'):
                         if cache_line in last_writer:
                             prev = last_writer[cache_line]
                             if prev['core'] != core:
@@ -180,4 +180,3 @@ if __name__ == "__main__":
         ww = True
         
     analyze_log(args.logfile, args.binary, check_read_write=rw, check_write_write=ww, pc_hotspots=args.pc_hotspots)
-

@@ -310,6 +310,20 @@ static inline uint64_t riscv_sb_core_id(CPURISCVState *env) {
 #endif
 }
 
+static inline void sb_log_event(CPURISCVState *env, const char *op,
+                                target_ulong pc, target_ulong addr,
+                                target_ulong val, const char *hit,
+                                uint32_t size) {
+  if (!riscv_sb_log_file) {
+    return;
+  }
+  uint64_t core_id = riscv_sb_core_id(env);
+  fprintf(riscv_sb_log_file,
+          "%" PRIu64 ",0x" TARGET_FMT_lx ",%s,0x" TARGET_FMT_lx
+          ",0x" TARGET_FMT_lx ",%s,%u\n",
+          core_id, pc, op, addr, val, hit, size);
+}
+
 static void sb_resolve_pc(char *buf, size_t buflen, target_ulong pc) {
 #ifdef CONFIG_USER_ONLY
   if (exec_path && exec_path[0]) {
@@ -388,6 +402,7 @@ void helper_sb_flush(CPURISCVState *env, target_ulong pc) {
 
 void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
                      uint32_t size, target_ulong pc) {
+  const bool log_store = env->sb.log_interactions;
   // If SB disabled, write directly
   if (!env->sb.enabled) {
     uintptr_t ra = GETPC();
@@ -405,6 +420,9 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
     case 8:
       cpu_stq_mmuidx_ra(env, addr, val, mmu_idx, ra);
       break;
+    }
+    if (log_store) {
+      sb_log_event(env, "Store", pc, addr, val, "-", size);
     }
     return;
   }
@@ -442,29 +460,14 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
     entry->write_count++;
   }
 
-  bool log_store = env->sb.log_interactions;
-  /* If specific flags are set, only log if relevant */
-  if (env->sb.log_write_sharing) {
-    log_store = true;
-  }
-
   if (log_store) {
-    if (riscv_sb_log_file) {
-#ifndef CONFIG_USER_ONLY
-      uint64_t core_id = env->mhartid;
-#else
-      uint64_t core_id = (uint64_t)env_cpu(env)->cpu_index;
-#endif
-      fprintf(riscv_sb_log_file,
-              "%" PRIu64 ",0x" TARGET_FMT_lx ",Store,0x" TARGET_FMT_lx
-              ",0x" TARGET_FMT_lx ",-,%d\n",
-              core_id, pc, addr, val, size);
-    }
+    sb_log_event(env, "Store", pc, addr, val, "-", size);
   }
 }
 
 target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
                             uint32_t size, target_ulong pc) {
+  const bool log_load = env->sb.log_read_sharing;
   // Check Store Buffer for forwarding (youngest to oldest)
   if (env->sb.enabled && env->sb.count > 0) {
     int idx = (env->sb.tail - 1 + env->sb.capacity) % env->sb.capacity;
@@ -487,23 +490,8 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
           }
           entry->fwd_count++;
         }
-        bool log_load = env->sb.log_interactions;
-        if (env->sb.log_read_sharing) {
-          log_load = true;
-        }
-
         if (log_load) {
-          if (riscv_sb_log_file) {
-#ifndef CONFIG_USER_ONLY
-            uint64_t core_id = env->mhartid;
-#else
-            uint64_t core_id = (uint64_t)env_cpu(env)->cpu_index;
-#endif
-            fprintf(riscv_sb_log_file,
-                    "%" PRIu64 ",0x" TARGET_FMT_lx ",LoadHit,0x" TARGET_FMT_lx
-                    ",0x" TARGET_FMT_lx ",1,%d\n",
-                    core_id, pc, addr, e->data, size);
-          }
+          sb_log_event(env, "LoadHit", pc, addr, e->data, "1", size);
         }
         return e->data;
       }
@@ -514,18 +502,28 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
   // Fallback to memory
   uintptr_t ra = GETPC();
   int mmu_idx = riscv_env_mmu_index(env, false);
+  target_ulong val;
   switch (size) {
   case 1:
-    return cpu_ldub_mmuidx_ra(env, addr, mmu_idx, ra);
+    val = cpu_ldub_mmuidx_ra(env, addr, mmu_idx, ra);
+    break;
   case 2:
-    return cpu_lduw_mmuidx_ra(env, addr, mmu_idx, ra);
+    val = cpu_lduw_mmuidx_ra(env, addr, mmu_idx, ra);
+    break;
   case 4:
-    return cpu_ldl_mmuidx_ra(env, addr, mmu_idx, ra);
+    val = cpu_ldl_mmuidx_ra(env, addr, mmu_idx, ra);
+    break;
   case 8:
-    return cpu_ldq_mmuidx_ra(env, addr, mmu_idx, ra);
+    val = cpu_ldq_mmuidx_ra(env, addr, mmu_idx, ra);
+    break;
   default:
-    return 0;
+    val = 0;
+    break;
   }
+  if (log_load) {
+    sb_log_event(env, "Load", pc, addr, val, "0", size);
+  }
+  return val;
 }
 
 void helper_sb_amo_lock(CPURISCVState *env, target_ulong addr,

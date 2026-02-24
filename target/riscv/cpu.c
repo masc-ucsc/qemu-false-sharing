@@ -747,11 +747,12 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
 
   /* Store Buffer Reset & Dynamic Initialization */
   env->sb.enabled = (riscv_sb_global_limit > 0) || (cpu->cfg.sb_limit > 0);
-  env->sb.log_interactions = riscv_sb_global_fs_read || cpu->cfg.sb_fs_read ||
-                             riscv_sb_global_fs_write || cpu->cfg.sb_fs_write ||
+  env->sb.log_read_sharing = riscv_sb_global_fs_read || cpu->cfg.sb_fs_read ||
                              cpu->cfg.sb_false_sharing;
-  env->sb.log_read_sharing = riscv_sb_global_fs_read || cpu->cfg.sb_fs_read;
-  env->sb.log_write_sharing = riscv_sb_global_fs_write || cpu->cfg.sb_fs_write;
+  env->sb.log_write_sharing = riscv_sb_global_fs_write || cpu->cfg.sb_fs_write ||
+                              cpu->cfg.sb_false_sharing;
+  env->sb.log_interactions =
+      env->sb.log_read_sharing || env->sb.log_write_sharing;
   env->sb.detect_deadlocks = riscv_sb_global_deadlock || cpu->cfg.sb_deadlock;
   env->sb.capacity =
       cpu->cfg.sb_limit > 0
@@ -764,14 +765,6 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
       /* Initialize Statistics Hashmap */
       env->sb.stats =
           g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
-
-      /* Initialize Global Log File (once) */
-      if (!riscv_sb_log_file) {
-        riscv_sb_log_file = fopen("instruction_log.txt", "w");
-        if (riscv_sb_log_file) {
-          fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit,Size\n");
-        }
-      }
 
       /* Register exit handler once */
       static bool exit_handler_registered = false;
@@ -790,6 +783,16 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
       /* Clear stats on reset */
       if (env->sb.stats) {
         g_hash_table_remove_all(env->sb.stats);
+      }
+    }
+  }
+
+  /* Initialize Global Log File (once) for logging-only runs too */
+  if (env->sb.log_interactions) {
+    if (!riscv_sb_log_file) {
+      riscv_sb_log_file = fopen("instruction_log.txt", "w");
+      if (riscv_sb_log_file) {
+        fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit,Size\n");
       }
     }
   }
@@ -3097,14 +3100,24 @@ static void riscv_sb_dump_stats(void) {
    * For multi-core, we should iterate `cpus`.
    */
 
-  // Create log file
-  FILE *log_file = riscv_sb_log_file;
-  if (!log_file) {
-    // If not open (e.g. SB disabled), try open now
-    log_file = fopen("instruction_log.txt", "w");
+  /* Only emit stats if at least one CPU collected any */
+  bool have_stats = false;
+  CPUState *cpu;
+  CPU_FOREACH(cpu) {
+    CPURISCVState *env = &RISCV_CPU(cpu)->env;
+    if (env->sb.stats && g_hash_table_size(env->sb.stats) > 0) {
+      have_stats = true;
+      break;
+    }
   }
-  if (!log_file)
+  if (!have_stats) {
     return;
+  }
+
+  FILE *log_file = fopen("instruction_log_stats.txt", "w");
+  if (!log_file) {
+    return;
+  }
 
   fprintf(
       log_file,
@@ -3113,7 +3126,6 @@ static void riscv_sb_dump_stats(void) {
       log_file,
       "==================================================================\n");
 
-  CPUState *cpu;
   CPU_FOREACH(cpu) {
     CPURISCVState *env = &RISCV_CPU(cpu)->env;
     if (env->sb.stats) {
@@ -3134,7 +3146,5 @@ static void riscv_sb_dump_stats(void) {
       }
     }
   }
-  if (log_file != stdout && log_file != stderr) {
-    fclose(log_file);
-  }
+  fclose(log_file);
 }

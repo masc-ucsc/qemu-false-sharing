@@ -1166,6 +1166,7 @@ static bool gen_amoswap(DisasContext *ctx, arg_atomic *a, MemOp mop)
 {
     TCGv dest = dest_gpr(ctx, a->rd);
     TCGv src1, src2 = get_gpr(ctx, a->rs2, EXT_NONE);
+    TCGv src2_copy = tcg_temp_new();
     MemOp size = mop & MO_SIZE;
 
     mop |= mo_endian(ctx);
@@ -1177,11 +1178,13 @@ static bool gen_amoswap(DisasContext *ctx, arg_atomic *a, MemOp mop)
 
     decode_save_opc(ctx, RISCV_UW2_ALWAYS_STORE_AMO);
     src1 = get_address(ctx, a->rs1, 0);
+    tcg_gen_mov_tl(src2_copy, src2);
     tcg_gen_atomic_xchg_tl(dest, src1, src2, ctx->mem_idx, mop);
 
     TCGv_i32 size_i32 = tcg_constant_i32(1 << (mop & MO_SIZE));
-    TCGv pc = tcg_constant_tl(ctx->base.pc_next);
-    gen_helper_sb_amo_lock(tcg_env, src1, src2, dest, size_i32, pc);
+    TCGv pc = tcg_temp_new();
+    gen_pc_plus_diff(pc, ctx, 0);
+    gen_helper_sb_amo_lock(tcg_env, src1, src2_copy, dest, size_i32, pc);
 
     gen_set_gpr(ctx, a->rd, dest);
     return true;

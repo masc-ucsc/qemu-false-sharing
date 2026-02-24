@@ -45,7 +45,7 @@ echo "=========================================================="
 # 2. Check if Log exists and Analyze
 if [ -f "instruction_log.txt" ]; then
     # Check if log is stale (older than 10 minutes)
-    if [ $(find "instruction_log.txt" -mmin +10) ]; then
+    if [ -n "$(find "instruction_log.txt" -mmin +10 -print)" ]; then
         echo "WARNING: 'instruction_log.txt' is old (>10 mins)."
         echo "You should probably run QEMU again to generate a fresh log."
         read -p "Analyze standard log anyway? [y/N] " confirm
