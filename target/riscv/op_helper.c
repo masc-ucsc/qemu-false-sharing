@@ -314,7 +314,9 @@ static void sb_resolve_pc(char *buf, size_t buflen, target_ulong pc) {
 #ifdef CONFIG_USER_ONLY
   if (exec_path && exec_path[0]) {
     char *pc_str = g_strdup_printf("0x%" PRIx64, (uint64_t)pc);
-    char *argv[] = {"addr2line", "-e", exec_path, "-f", "-C", "-p", pc_str, NULL};
+    gchar *argv[] = {(gchar *)"addr2line", (gchar *)"-e", exec_path,
+                     (gchar *)"-f", (gchar *)"-C", (gchar *)"-p", pc_str,
+                     NULL};
     char *stdout_buf = NULL;
     char *stderr_buf = NULL;
     gint status = 0;

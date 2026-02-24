@@ -17,10 +17,10 @@
  *  along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
 #include "qemu-version.h"
 #include "qemu/accel.h"
 #include "qemu/help-texts.h"
-#include "qemu/osdep.h"
 #include "qemu/units.h"
 #include <linux/binfmts.h>
 #include <sys/resource.h>
@@ -32,11 +32,11 @@
 #include "elf.h"
 #include "exec/gdbstub.h"
 #include "exec/page-vary.h"
+#include "qemu.h"
 #include "fd-trans.h"
 #include "gdbstub/user.h"
 #include "loader.h"
 #include "qapi/error.h"
-#include "qemu.h"
 #include "qemu/config-file.h"
 #include "qemu/cutils.h"
 #include "qemu/envlist.h"
