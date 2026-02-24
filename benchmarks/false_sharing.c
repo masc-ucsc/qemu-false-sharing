@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -22,29 +23,47 @@ typedef struct {
 
 FalseSharingData data;
 
+static long parse_iterations(int argc, char **argv) {
+  const char *env_iters = getenv("ITERATIONS");
+  const char *arg = (argc > 1) ? argv[1] : env_iters;
+  if (!arg || !*arg) {
+    return 1000000;
+  }
+  char *end = NULL;
+  long val = strtol(arg, &end, 10);
+  if (end == arg || val <= 0) {
+    return 1000000;
+  }
+  return val;
+}
+
 void *thread_func_a(void *arg) {
-  for (int i = 0; i < 1000000; i++) {
+  long iters = (long)(intptr_t)arg;
+  for (long i = 0; i < iters; i++) {
     data.a++;
   }
   return NULL;
 }
 
 void *thread_func_b(void *arg) {
-  for (int i = 0; i < 1000000; i++) {
+  long iters = (long)(intptr_t)arg;
+  for (long i = 0; i < iters; i++) {
     data.b++;
   }
   return NULL;
 }
 
-int main() {
+int main(int argc, char **argv) {
   pthread_t t1, t2;
+  long iters = parse_iterations(argc, argv);
 
   printf("Starting False Sharing Benchmark...\n");
+  printf("Iterations: %ld\n", iters);
   printf("Address of A: %p\n", &data.a);
   printf("Address of B: %p\n", &data.b);
 
-  pthread_create(&t1, NULL, thread_func_a, NULL);
-  pthread_create(&t2, NULL, thread_func_b, NULL);
+  pthread_create(&t1, NULL, thread_func_a, (void *)(intptr_t)iters);
+  pthread_create(&t2, NULL, thread_func_b, (void *)(intptr_t)iters);
 
   pthread_join(t1, NULL);
   pthread_join(t2, NULL);
