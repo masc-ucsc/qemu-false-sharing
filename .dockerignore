@@ -1,0 +1,8 @@
+build/
+*.img
+*.xz
+*.elf
+rootfs.*
+kernel_payload.*
+results/
+.git/

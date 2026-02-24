@@ -268,10 +268,9 @@ typedef struct {
   uint64_t fwd_count;
 } SBStatsEntry;
 
-void helper_sb_flush(CPURISCVState *env, target_ulong pc) {
+static void do_sb_flush(CPURISCVState *env, target_ulong pc, uintptr_t ra) {
   int i;
   int idx = env->sb.head;
-  uintptr_t ra = GETPC();
   int mmu_idx = riscv_env_mmu_index(env, false);
 
   if (env->sb.log_interactions) {
@@ -307,6 +306,10 @@ void helper_sb_flush(CPURISCVState *env, target_ulong pc) {
   env->sb.count = 0;
 }
 
+void helper_sb_flush(CPURISCVState *env, target_ulong pc) {
+  do_sb_flush(env, pc, GETPC());
+}
+
 void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
                      uint32_t size, target_ulong pc) {
   // If SB disabled, write directly
@@ -333,10 +336,10 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
   // Flush if full
   if (env->sb.count >= env->sb.capacity) {
     if (env->sb.log_interactions) {
-      qemu_log("SB_FULL: Flushing %d instructions at pc=0x" TARGET_FMT_lx "\n",
-               env->sb.count, pc);
+      /* qemu_log("SB_FULL: Flushing %d instructions at pc=0x" TARGET_FMT_lx
+         "\n", env->sb.count, pc); */
     }
-    helper_sb_flush(env, pc);
+    do_sb_flush(env, pc, GETPC());
   }
 
   // Add to buffer
@@ -374,10 +377,10 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
 #ifndef CONFIG_USER_ONLY
       uint64_t core_id = env->mhartid;
 #else
-      uint64_t core_id = 0; // Default for user-mode
+      uint64_t core_id = (uint64_t)env_cpu(env)->cpu_index;
 #endif
       fprintf(riscv_sb_log_file,
-              "%lu,0x" TARGET_FMT_lx ",Store,0x" TARGET_FMT_lx
+              "%" PRIu64 ",0x" TARGET_FMT_lx ",Store,0x" TARGET_FMT_lx
               ",0x" TARGET_FMT_lx ",-,%d\n",
               core_id, pc, addr, val, size);
     }
@@ -418,7 +421,7 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
 #ifndef CONFIG_USER_ONLY
             uint64_t core_id = env->mhartid;
 #else
-            uint64_t core_id = 0;
+            uint64_t core_id = (uint64_t)env_cpu(env)->cpu_index;
 #endif
             fprintf(riscv_sb_log_file,
                     "%" PRIu64 ",0x" TARGET_FMT_lx ",LoadHit,0x" TARGET_FMT_lx

@@ -769,7 +769,7 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
       if (!riscv_sb_log_file) {
         riscv_sb_log_file = fopen("instruction_log.txt", "w");
         if (riscv_sb_log_file) {
-          fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit\n");
+          fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit,Size\n");
         }
       }
 
