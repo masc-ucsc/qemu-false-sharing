@@ -408,13 +408,15 @@ void helper_sb_flush(CPURISCVState *env, target_ulong pc) {
 void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
                      uint32_t size, target_ulong pc) {
   const bool log_store = env->sb.log_interactions;
+  /* GETPC() must only be called once per top-level helper. */
+  uintptr_t ra = GETPC();
+
   /* Be defensive: if SB is enabled by flags but not initialized, fall back. */
   if (env->sb.enabled && (env->sb.capacity <= 0 || !env->sb.buffer)) {
     env->sb.enabled = false;
   }
   // If SB disabled, write directly
   if (!env->sb.enabled) {
-    uintptr_t ra = GETPC();
     int mmu_idx = riscv_env_mmu_index(env, false);
     switch (size) {
     case 1:
@@ -438,11 +440,7 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
 
   // Flush if full
   if (env->sb.count >= env->sb.capacity) {
-    if (env->sb.log_interactions) {
-      /* qemu_log("SB_FULL: Flushing %d instructions at pc=0x" TARGET_FMT_lx
-         "\n", env->sb.count, pc); */
-    }
-    do_sb_flush(env, pc, GETPC());
+    do_sb_flush(env, pc, ra);
   }
 
   // Add to buffer
@@ -477,6 +475,10 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
 target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
                             uint32_t size, target_ulong pc) {
   const bool log_load = env->sb.log_read_sharing;
+  /* GETPC() must only be called once per top-level helper to avoid issues
+   * with compiler optimizations. Capture it immediately. */
+  uintptr_t ra = GETPC();
+
   /* Be defensive: if SB is enabled by flags but not initialized, fall back. */
   if (env->sb.enabled && (env->sb.capacity <= 0 || !env->sb.buffer)) {
     env->sb.enabled = false;
@@ -487,8 +489,6 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
     int i;
     for (i = 0; i < env->sb.count; i++) {
       SBEntry *e = &env->sb.buffer[idx];
-      // Simple forwarding implementation: exact match only for now
-      // TODO: Handle partial overlaps
       if (e->addr == addr && e->size == size) {
         if (env->sb.stats) {
           uint64_t *key_addr = g_new(uint64_t, 1);
@@ -510,10 +510,17 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
       }
       idx = (idx - 1 + env->sb.capacity) % env->sb.capacity;
     }
+    /*
+     * Buffer miss: the requested load did not match any buffered store
+     * (different address or different size / partial overlap).
+     * Flush the buffer to memory first so the read sees a consistent state.
+     * Without this, mixed-width accesses (e.g., sd followed by lw on the
+     * same address) would read stale memory and crash.
+     */
+    do_sb_flush(env, pc, ra);
   }
 
   // Fallback to memory
-  uintptr_t ra = GETPC();
   int mmu_idx = riscv_env_mmu_index(env, false);
   target_ulong val;
   switch (size) {

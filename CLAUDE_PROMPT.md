@@ -1,8 +1,3 @@
-# Claude Code Prompt — QEMU False Sharing Detection Project
-
-Copy everything below and paste it as your first message in Claude Code:
-
----
 
 I'm working on a modified QEMU fork at `/Users/vijayarvind/Documents/Projects/qemu` that adds **false sharing detection** and **concurrency bug detection** to the RISC-V target. The project intercepts all Load/Store/Fence instructions and routes them through a per-CPU store buffer to detect cross-thread cache-line conflicts.
 

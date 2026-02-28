@@ -9,6 +9,7 @@ RUN apt-get update && \
     libglib2.0-dev libpixman-1-dev \
     python3 python3-venv python3-tomli \
     gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu \
+    libc6-dev-riscv64-cross \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /qemu
@@ -24,10 +25,17 @@ RUN mkdir -p build && cd build && \
         --disable-guest-agent \
     && ninja -j2
 
-# Cross-compile benchmarks
+# Cross-compile all benchmarks
 RUN riscv64-linux-gnu-gcc -g -O0 -static -pthread \
     benchmarks/false_sharing.c -o benchmarks/false_sharing.rv64 && \
     riscv64-linux-gnu-gcc -g -O0 -static -pthread \
-    benchmarks/true_sharing.c -o benchmarks/true_sharing.rv64
+    benchmarks/true_sharing.c -o benchmarks/true_sharing.rv64 && \
+    riscv64-linux-gnu-gcc -g -O0 -static -pthread \
+    benchmarks/deadlock.c -o benchmarks/deadlock.rv64
 
-CMD ["bash", "run_user_test.sh"]
+# addr2line for source-line resolution (riscv64 cross version)
+# Already available as riscv64-linux-gnu-addr2line from binutils pkg.
+# Symlink so the Python script can find plain "addr2line":
+RUN ln -sf /usr/bin/riscv64-linux-gnu-addr2line /usr/local/bin/addr2line
+
+CMD ["bash"]

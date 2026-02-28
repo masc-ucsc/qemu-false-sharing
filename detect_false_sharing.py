@@ -108,7 +108,7 @@ def analyze_log(filename, binary=None, check_read_write=True, check_write_write=
                         elif conflict_type == 'Write-Write':
                             pc_stat['ww_count'] += 1
 
-                except (ValueError, KeyError):
+                except (ValueError, KeyError, TypeError):
                     continue
 
     except FileNotFoundError:

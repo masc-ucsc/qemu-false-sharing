@@ -25,5 +25,6 @@ GTAGS
 rootfs.img
 *.raw.xz
 instruction_log.txt
+instruction_log_stats.txt
 results/
 *.rv64
