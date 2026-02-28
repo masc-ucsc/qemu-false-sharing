@@ -397,12 +397,21 @@ static void do_sb_flush(CPURISCVState *env, target_ulong pc, uintptr_t ra) {
 }
 
 void helper_sb_flush(CPURISCVState *env, target_ulong pc) {
+  /* Be defensive: in linux-user new threads/CPUs can reach helpers early.
+   * If the SB isn't fully initialized, treat as disabled. */
+  if (!env->sb.enabled || env->sb.capacity <= 0 || !env->sb.buffer) {
+    return;
+  }
   do_sb_flush(env, pc, GETPC());
 }
 
 void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
                      uint32_t size, target_ulong pc) {
   const bool log_store = env->sb.log_interactions;
+  /* Be defensive: if SB is enabled by flags but not initialized, fall back. */
+  if (env->sb.enabled && (env->sb.capacity <= 0 || !env->sb.buffer)) {
+    env->sb.enabled = false;
+  }
   // If SB disabled, write directly
   if (!env->sb.enabled) {
     uintptr_t ra = GETPC();
@@ -468,6 +477,10 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
 target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
                             uint32_t size, target_ulong pc) {
   const bool log_load = env->sb.log_read_sharing;
+  /* Be defensive: if SB is enabled by flags but not initialized, fall back. */
+  if (env->sb.enabled && (env->sb.capacity <= 0 || !env->sb.buffer)) {
+    env->sb.enabled = false;
+  }
   // Check Store Buffer for forwarding (youngest to oldest)
   if (env->sb.enabled && env->sb.count > 0) {
     int idx = (env->sb.tail - 1 + env->sb.capacity) % env->sb.capacity;

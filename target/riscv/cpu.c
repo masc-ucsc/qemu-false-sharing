@@ -759,6 +759,12 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
           ? cpu->cfg.sb_limit
           : (riscv_sb_global_limit > 0 ? riscv_sb_global_limit : 0);
 
+  if (env->sb.enabled && env->sb.capacity <= 0) {
+    /* Misconfiguration: treat as disabled to avoid g_malloc0(0) and helpers
+     * assuming initialization happened. */
+    env->sb.enabled = false;
+  }
+
   if (env->sb.enabled) {
     if (!env->sb.buffer) {
       env->sb.buffer = g_malloc0(env->sb.capacity * sizeof(SBEntry));
