@@ -23,10 +23,10 @@ fi
 # ── Configuration (override with env vars) ────────
 BUFFER_SIZE=${BUFFER_SIZE:-64}
 BENCHMARK=${BENCHMARK:-false_sharing}
-ITERATIONS=${ITERATIONS:-500}
-TIMEOUT=${TIMEOUT:-120}
+ITERATIONS=${ITERATIONS:-2000}
+TIMEOUT=${TIMEOUT:-300}
 DOCKER_MEM=${DOCKER_MEM:-4g}
-DEADLOCK=${DEADLOCK:-0}
+DEADLOCK=${DEADLOCK:-1}
 IMAGE_NAME="qemu-false-sharing"
 
 # Docker Hub image (pre-built = instant, no compilation)
