@@ -21,10 +21,16 @@ GTAGS
 *.patch
 *.gcov
 
-# Large files
+# Large files / images
 rootfs.img
 *.raw.xz
+*.elf
 instruction_log.txt
 instruction_log_stats.txt
 results/
 *.rv64
+
+# Internal / generated
+ai_usage_trace.csv
+agent_stats_tool
+CLAUDE_PROMPT.md
