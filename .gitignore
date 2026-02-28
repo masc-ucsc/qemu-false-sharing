@@ -20,3 +20,10 @@ GTAGS
 *.swp
 *.patch
 *.gcov
+
+# Large files
+rootfs.img
+*.raw.xz
+instruction_log.txt
+results/
+*.rv64
