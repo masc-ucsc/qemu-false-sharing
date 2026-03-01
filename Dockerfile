@@ -31,7 +31,13 @@ RUN riscv64-linux-gnu-gcc -g -O0 -static -pthread \
     riscv64-linux-gnu-gcc -g -O0 -static -pthread \
     benchmarks/true_sharing.c -o benchmarks/true_sharing.rv64 && \
     riscv64-linux-gnu-gcc -g -O0 -static -pthread \
-    benchmarks/deadlock.c -o benchmarks/deadlock.rv64
+    benchmarks/deadlock.c -o benchmarks/deadlock.rv64 && \
+    riscv64-linux-gnu-gcc -g -O0 -static -pthread \
+    benchmarks/parallel_compress.c -o benchmarks/parallel_compress.rv64 && \
+    riscv64-linux-gnu-gcc -g -O0 -static -pthread \
+    benchmarks/word_count.c -o benchmarks/word_count.rv64 && \
+    riscv64-linux-gnu-gcc -g -O0 -static -pthread \
+    benchmarks/parallel_sort.c -o benchmarks/parallel_sort.rv64
 
 # addr2line for source-line resolution (riscv64 cross version)
 # Already available as riscv64-linux-gnu-addr2line from binutils pkg.

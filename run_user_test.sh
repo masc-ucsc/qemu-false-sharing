@@ -22,7 +22,7 @@ fi
 
 # ── Configuration (override with env vars) ────────
 BUFFER_SIZE=${BUFFER_SIZE:-64}
-BENCHMARK=${BENCHMARK:-false_sharing}
+BENCHMARK=${BENCHMARK:-all}        # 'all' runs all three real-world apps
 ITERATIONS=${ITERATIONS:-2000}
 TIMEOUT=${TIMEOUT:-300}
 DOCKER_MEM=${DOCKER_MEM:-4g}
@@ -39,7 +39,6 @@ echo ""
 
 # ── Step 1: Get Docker Image ─────────────────────
 if [ -n "$REMOTE_IMAGE" ]; then
-    # Fast path: pull pre-built image
     echo "[1/3] Pulling pre-built image..."
     docker pull "$REMOTE_IMAGE"
     IMAGE_NAME="$REMOTE_IMAGE"
@@ -66,51 +65,97 @@ if [ "$DEADLOCK" = "1" ]; then
     QEMU_FLAGS="$QEMU_FLAGS -deadlock-detector"
 fi
 
-# ── Step 2: Run Benchmark ─────────────────────────
-echo "[2/3] Running '$BENCHMARK' (iterations=$ITERATIONS, timeout=${TIMEOUT}s)..."
+# ── Step 2: Run Benchmark(s) ─────────────────────
 mkdir -p results
 
-docker run --rm \
-    --memory="$DOCKER_MEM" \
-    -e ITERATIONS="$ITERATIONS" \
-    -v "$(pwd)/results:/output" \
-    "$IMAGE_NAME" bash -c "
-        cd /qemu
-        EXIT_CODE=0
+run_one() {
+    local bench="$1"
+    local label="$2"
+    local iters="$3"
 
-        # Run benchmark under qemu-riscv64 with timeout
-        timeout ${TIMEOUT}s ./build/qemu-riscv64 \\
-            $QEMU_FLAGS \\
-            benchmarks/${BENCHMARK}.rv64 \${ITERATIONS} 2>/output/stderr.txt || EXIT_CODE=\$?
+    echo "  --> $label (iterations=$iters)..."
 
-        if [ \$EXIT_CODE -eq 124 ]; then
-            echo 'WARNING: Benchmark timed out after ${TIMEOUT}s (try fewer ITERATIONS)' | tee -a /output/stderr.txt
+    docker run --rm \
+        --memory="$DOCKER_MEM" \
+        -e ITERATIONS="$iters" \
+        -v "$(pwd)/results:/output" \
+        "$IMAGE_NAME" bash -c "
+            cd /qemu
+            EXIT_CODE=0
+
+            timeout ${TIMEOUT}s ./build/qemu-riscv64 \\
+                $QEMU_FLAGS \\
+                benchmarks/${bench}.rv64 \${ITERATIONS} 2>/tmp/bench_stderr.txt || EXIT_CODE=\$?
+
+            if [ \$EXIT_CODE -eq 124 ]; then
+                echo 'WARNING: timed out after ${TIMEOUT}s' | tee -a /tmp/bench_stderr.txt
+            fi
+
+            cp instruction_log.txt /output/instruction_log_${bench}.txt 2>/dev/null || true
+            cp /tmp/bench_stderr.txt /output/stderr_${bench}.txt 2>/dev/null || true
+
+            if [ -f instruction_log.txt ]; then
+                python3 detect_false_sharing.py instruction_log.txt \\
+                    --binary benchmarks/${bench}.rv64 \\
+                    --pc-hotspots \\
+                    --read-write --write-write \\
+                    2>&1 | tee /output/report_${bench}.txt
+            else
+                echo 'No instruction log produced.' | tee /output/report_${bench}.txt
+            fi
+
+            if [ -s /tmp/bench_stderr.txt ]; then
+                echo '' >> /output/report_${bench}.txt
+                echo '=== Deadlock / Runtime Warnings ===' >> /output/report_${bench}.txt
+                cat /tmp/bench_stderr.txt >> /output/report_${bench}.txt
+            fi
+
+            rm -f instruction_log.txt instruction_log_stats.txt
+        "
+    echo "      Saved to results/report_${bench}.txt"
+}
+
+if [ "$BENCHMARK" = "all" ]; then
+    echo "[2/3] Running all three real-world multithreaded apps..."
+    echo ""
+    # Each app uses its own iteration count — real apps do far more work per
+    # iteration than the synthetic benchmark, so they need smaller values to
+    # keep the instruction log at a manageable size.
+    ITER_COMPRESS=${ITER_COMPRESS:-${ITERATIONS}}
+    ITER_WORDCOUNT=${ITER_WORDCOUNT:-${ITERATIONS}}
+    ITER_SORT=${ITER_SORT:-${ITERATIONS}}
+    ITER_BASELINE=${ITER_BASELINE:-${ITERATIONS}}
+
+    run_one "parallel_compress" "pigz-style parallel pipeline (pipeline false sharing)"         "$ITER_COMPRESS"
+    run_one "word_count"        "Phoenix MapReduce word count (hash table + per-thread stats)"  "$ITER_WORDCOUNT"
+    run_one "parallel_sort"     "Parallel merge sort (merge-state flag false sharing)"          "$ITER_SORT"
+
+    # Also run the original false_sharing benchmark for comparison
+    run_one "false_sharing"     "Synthetic false sharing (baseline)"                            "$ITER_BASELINE"
+
+    # Combine reports
+    echo ""
+    echo "=== Combined Report ===" > results/report.txt
+    for bench in parallel_compress word_count parallel_sort false_sharing; do
+        if [ -f "results/report_${bench}.txt" ]; then
+            echo "" >> results/report.txt
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >> results/report.txt
+            echo "  APP: ${bench}" >> results/report.txt
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >> results/report.txt
+            cat "results/report_${bench}.txt" >> results/report.txt
         fi
+    done
 
-        # Copy log out
-        cp instruction_log.txt /output/ 2>/dev/null || true
-        cp instruction_log_stats.txt /output/ 2>/dev/null || true
+elif [ "$BENCHMARK" = "deadlock" ]; then
+    echo "[2/3] Running deadlock detection..."
+    run_one "deadlock" "ABBA deadlock" "$ITERATIONS"
+    cp results/report_deadlock.txt results/report.txt 2>/dev/null || true
+else
+    echo "[2/3] Running '$BENCHMARK'..."
+    run_one "$BENCHMARK" "$BENCHMARK" "$ITERATIONS"
+    cp "results/report_${BENCHMARK}.txt" results/report.txt 2>/dev/null || true
+fi
 
-        # Analyze false sharing
-        if [ -f instruction_log.txt ]; then
-            python3 detect_false_sharing.py instruction_log.txt \\
-                --binary benchmarks/${BENCHMARK}.rv64 \\
-                --pc-hotspots \\
-                --read-write --write-write \\
-                2>&1 | tee /output/report.txt
-        else
-            echo 'No instruction log produced.' | tee /output/report.txt
-        fi
-
-        # Show deadlock warnings (they go to stderr)
-        if [ -s /output/stderr.txt ]; then
-            echo '' >> /output/report.txt
-            echo '=== Deadlock / Runtime Warnings ===' >> /output/report.txt
-            cat /output/stderr.txt >> /output/report.txt
-        fi
-    "
-
-echo "      Done"
 echo ""
 
 # ── Step 3: Results ───────────────────────────────
@@ -122,14 +167,13 @@ else
     echo "  (no report -- check Docker output above)"
 fi
 echo ""
-echo "  Log:    results/instruction_log.txt"
-echo "  Report: results/report.txt"
-echo "  Stderr: results/stderr.txt"
+echo "Output files in results/:"
+ls results/ 2>/dev/null | sed 's/^/  /'
 echo "=============================================="
 echo ""
 echo "Examples:"
-echo "  ./run_user_test.sh                                    # default (false sharing, 500 iters)"
-echo "  ITERATIONS=1000 BUFFER_SIZE=128 ./run_user_test.sh    # more iterations, bigger buffer"
-echo "  BENCHMARK=true_sharing ./run_user_test.sh             # control test (no false sharing)"
-echo "  BENCHMARK=deadlock DEADLOCK=1 ./run_user_test.sh      # deadlock detection demo"
-echo "  TIMEOUT=300 ITERATIONS=5000 ./run_user_test.sh        # longer run"
+echo "  ./run_user_test.sh                               # run all 3 real apps (default)"
+echo "  BENCHMARK=parallel_sort ./run_user_test.sh       # single app"
+echo "  BENCHMARK=deadlock DEADLOCK=1 ./run_user_test.sh # deadlock detection"
+echo "  BENCHMARK=false_sharing ./run_user_test.sh       # synthetic baseline"
+echo "  ITERATIONS=5000 TIMEOUT=600 ./run_user_test.sh   # longer run"
