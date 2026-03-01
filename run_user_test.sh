@@ -7,6 +7,29 @@ echo "  (False Sharing + Deadlock Detection)"
 echo "=============================================="
 echo ""
 
+# ── Helpers ───────────────────────────────────────
+run_with_timeout() {
+    local timeout_secs="$1"
+    shift
+    local pid
+    local elapsed=0
+
+    "$@" &
+    pid=$!
+
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$elapsed" -ge "$timeout_secs" ]; then
+            kill -TERM "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 124
+        fi
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+
+    wait "$pid"
+}
+
 # ── Check Docker ──────────────────────────────────
 if ! command -v docker &> /dev/null; then
     echo "ERROR: Docker is required. Install Docker Desktop:"
@@ -14,9 +37,11 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! docker info &> /dev/null; then
-    echo "ERROR: Docker daemon is not running."
+DOCKER_INFO_TIMEOUT=${DOCKER_INFO_TIMEOUT:-20}
+if ! run_with_timeout "$DOCKER_INFO_TIMEOUT" docker info &> /dev/null; then
+    echo "ERROR: Docker daemon is not running or is unresponsive (timeout ${DOCKER_INFO_TIMEOUT}s)."
     echo "  Start Docker Desktop and retry."
+    echo "  Tip: increase timeout with DOCKER_INFO_TIMEOUT=60 if Docker is slow to start."
     exit 1
 fi
 
@@ -25,12 +50,47 @@ BUFFER_SIZE=${BUFFER_SIZE:-64}
 BENCHMARK=${BENCHMARK:-all}        # 'all' runs all three real-world apps
 ITERATIONS=${ITERATIONS:-2000}
 TIMEOUT=${TIMEOUT:-300}
-DOCKER_MEM=${DOCKER_MEM:-4g}
 DEADLOCK=${DEADLOCK:-1}
 IMAGE_NAME="qemu-false-sharing"
 
 # Docker Hub image (pre-built = instant, no compilation)
 REMOTE_IMAGE="${DOCKER_HUB_IMAGE:-}"
+
+detect_max_docker_mem() {
+    local bytes
+    local gib
+    local reserve_gib=1
+
+    # Prefer Docker's own memory total (reflects Docker Desktop limit).
+    bytes="$(run_with_timeout "$DOCKER_INFO_TIMEOUT" docker info --format '{{.MemTotal}}' 2>/dev/null || true)"
+    if [[ "$bytes" =~ ^[0-9]+$ ]] && [ "$bytes" -gt 0 ]; then
+        gib=$((bytes / 1024 / 1024 / 1024))
+        [ "$gib" -gt "$reserve_gib" ] && gib=$((gib - reserve_gib))
+        [ "$gib" -lt 2 ] && gib=2
+        echo "${gib}g"
+        return
+    fi
+
+    # Fallback for macOS if docker info is unavailable during startup.
+    if command -v sysctl >/dev/null 2>&1; then
+        bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+        if [[ "$bytes" =~ ^[0-9]+$ ]] && [ "$bytes" -gt 0 ]; then
+            gib=$((bytes / 1024 / 1024 / 1024))
+            [ "$gib" -gt "$reserve_gib" ] && gib=$((gib - reserve_gib))
+            [ "$gib" -lt 2 ] && gib=2
+            echo "${gib}g"
+            return
+        fi
+    fi
+
+    # Conservative fallback.
+    echo "4g"
+}
+
+if [ -z "${DOCKER_MEM:-}" ]; then
+    DOCKER_MEM="$(detect_max_docker_mem)"
+    echo "Auto-selected Docker memory cap: $DOCKER_MEM"
+fi
 
 echo "Config:"
 echo "  benchmark=$BENCHMARK  iterations=$ITERATIONS  buffer=$BUFFER_SIZE"
@@ -46,7 +106,7 @@ elif docker image inspect "$IMAGE_NAME" &> /dev/null; then
     echo "[1/3] Using cached image '$IMAGE_NAME'"
 else
     echo "[1/3] Building Docker image (first run only, ~10 min)..."
-    echo "      Tip: set DOCKER_MEM=8g if you get OOM errors"
+    echo "      Tip: override with DOCKER_MEM=<N>g if you want a custom cap"
     docker build \
         --memory="$DOCKER_MEM" \
         -t "$IMAGE_NAME" . 2>&1 | tail -5
