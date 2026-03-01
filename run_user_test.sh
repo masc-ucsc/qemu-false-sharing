@@ -133,10 +133,40 @@ if [ "$BENCHMARK" = "all" ]; then
     # Also run the original false_sharing benchmark for comparison
     run_one "false_sharing"     "Synthetic false sharing (baseline)"                            "$ITER_BASELINE"
 
+    # Run DuckDB TPC-H if the binary was built
+    docker run --rm "$IMAGE_NAME" test -f benchmarks/duckdb.rv64 && HAS_DUCKDB=1 || HAS_DUCKDB=0
+    if [ "$HAS_DUCKDB" = "1" ]; then
+        echo "  --> DuckDB TPC-H micro-benchmark (real-world OLAP database)..."
+        docker run --rm \
+            --memory="$DOCKER_MEM" \
+            -v "$(pwd)/results:/output" \
+            "$IMAGE_NAME" bash -c "
+                cd /qemu
+                timeout ${TIMEOUT}s ./build/qemu-riscv64 \
+                    $QEMU_FLAGS \
+                    benchmarks/duckdb.rv64 \
+                    -c 'INSTALL tpch; LOAD tpch; CALL dbgen(sf=0.01); SELECT count(*) FROM lineitem;' \
+                    2>/tmp/duckdb_stderr.txt || true
+
+                cp instruction_log.txt /output/instruction_log_duckdb.txt 2>/dev/null || true
+                cp /tmp/duckdb_stderr.txt /output/stderr_duckdb.txt 2>/dev/null || true
+
+                if [ -f instruction_log.txt ]; then
+                    python3 detect_false_sharing.py instruction_log.txt \
+                        --pc-hotspots --read-write --write-write \
+                        2>&1 | tee /output/report_duckdb.txt
+                fi
+                rm -f instruction_log.txt instruction_log_stats.txt
+            "
+        echo "      Saved to results/report_duckdb.txt"
+    else
+        echo "  --> DuckDB: skipped (binary not available)"
+    fi
+
     # Combine reports
     echo ""
     echo "=== Combined Report ===" > results/report.txt
-    for bench in parallel_compress word_count parallel_sort false_sharing; do
+    for bench in parallel_compress word_count parallel_sort false_sharing duckdb; do
         if [ -f "results/report_${bench}.txt" ]; then
             echo "" >> results/report.txt
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >> results/report.txt

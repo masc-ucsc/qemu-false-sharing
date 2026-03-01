@@ -798,6 +798,11 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
     if (!riscv_sb_log_file) {
       riscv_sb_log_file = fopen("instruction_log.txt", "w");
       if (riscv_sb_log_file) {
+        /* 1 MB write buffer — reduces write() syscalls by ~250x.
+         * Default stdio is 4-8 KB; each fprintf for every load/store
+         * caused massive I/O overhead.  Fully-buffered mode flushes
+         * only when the buffer fills or the file is closed at exit. */
+        setvbuf(riscv_sb_log_file, NULL, _IOFBF, 1 << 20);
         fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit,Size\n");
       }
     }
