@@ -49,7 +49,7 @@ fi
 BUFFER_SIZE=${BUFFER_SIZE:-64}
 BENCHMARK=${BENCHMARK:-all}        # 'all' runs all three real-world apps
 ITERATIONS=${ITERATIONS:-2000}
-TIMEOUT=${TIMEOUT:-300}
+TIMEOUT=${TIMEOUT:-600}
 DEADLOCK=${DEADLOCK:-1}
 IMAGE_NAME="qemu-false-sharing"
 
@@ -181,11 +181,11 @@ if [ "$BENCHMARK" = "all" ]; then
     # Per-app iteration defaults.  Real apps do far more work per
     # iteration than the synthetic benchmark — each produces millions
     # of load/store log entries, so we cap them to keep log files
-    # under ~300 MB and runtime under ~3 min each.
-    ITER_COMPRESS=${ITER_COMPRESS:-10}        # 10 blocks (pigz pipeline)
-    ITER_WORDCOUNT=${ITER_WORDCOUNT:-3}       # 3 passes over 4 KB text
-    ITER_SORT=${ITER_SORT:-50}                # 50 sorts of 512 elements
-    ITER_BASELINE=${ITER_BASELINE:-2000}      # synthetic — lightweight
+    # under ~500 MB and runtime under ~5 min each.
+    ITER_COMPRESS=${ITER_COMPRESS:-30}        # 30 blocks (pigz pipeline)
+    ITER_WORDCOUNT=${ITER_WORDCOUNT:-5}       # 5 passes over 4 KB text
+    ITER_SORT=${ITER_SORT:-70}                # 70 sorts of 512 elements
+    ITER_BASELINE=${ITER_BASELINE:-5000}      # synthetic — lightweight
 
     run_one "parallel_compress" "pigz-style parallel pipeline (pipeline false sharing)"         "$ITER_COMPRESS"
     run_one "word_count"        "Phoenix MapReduce word count (hash table + per-thread stats)"  "$ITER_WORDCOUNT"

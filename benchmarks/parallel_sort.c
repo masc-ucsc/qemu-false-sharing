@@ -28,7 +28,7 @@
 
 /* ── tunables ─────────────────────────────────────────────────── */
 #define NUM_THREADS  2
-#define ARRAY_SIZE   512          /* 512 64-bit integers             */
+#define ARRAY_SIZE   1024         /* 1024 64-bit integers            */
 
 /* ── per-thread sort task ─────────────────────────────────────── */
 typedef struct {

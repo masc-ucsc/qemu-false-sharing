@@ -28,9 +28,9 @@
 
 /* ── tunables ─────────────────────────────────────────────────── */
 #define NUM_THREADS     2
-#define HASH_BUCKETS    1024
+#define HASH_BUCKETS    2048
 #define MAX_WORD_LEN    64
-#define TEXT_SIZE       (4 * 1024)    /* 4 KB synthetic text         */
+#define TEXT_SIZE       (8 * 1024)    /* 8 KB synthetic text         */
 
 /* ── hash table ───────────────────────────────────────────────── */
 typedef struct WordEntry {

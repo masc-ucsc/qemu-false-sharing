@@ -23,8 +23,8 @@
 #include <string.h>
 
 /* ── tunables ─────────────────────────────────────────────────── */
-#define BLOCK_SIZE   256          /* bytes per work block           */
-#define QUEUE_DEPTH  8            /* pipeline queue slots           */
+#define BLOCK_SIZE   512          /* bytes per work block           */
+#define QUEUE_DEPTH  16           /* pipeline queue slots           */
 #define NUM_WORKERS  2            /* compressor threads             */
 
 /* ── work block ───────────────────────────────────────────────── */
