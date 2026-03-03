@@ -120,13 +120,57 @@ DEADLOCK: core 0 waits on lock 0x4b2060 at pc 0x10456 (deadlock.c:52),
   held by core 0 (acquired at pc 0x10452 (deadlock.c:50)).
 ```
 
-## Benchmarks Included
+## Benchmarks & Evaluation Results
 
-| File | What It Tests |
-|------|--------------|
-| `benchmarks/false_sharing.c` | Two threads writing adjacent words on the same cache line (triggers false sharing detection) |
-| `benchmarks/true_sharing.c` | Producer-consumer with explicit shared counter (control -- should show true sharing only) |
-| `benchmarks/deadlock.c` | Two threads acquiring two mutexes in opposite order (ABBA pattern, triggers deadlock detection) |
+We evaluated the framework across **5 multi-threaded workloads** of increasing complexity. All benchmarks were cross-compiled for RISC-V and executed inside our instrumented QEMU emulator.
+
+### Benchmark Suite
+
+| Benchmark | Description | Source |
+|-----------|-------------|--------|
+| **False Sharing** | Two threads writing adjacent words on the same cache line (canonical false sharing) | `benchmarks/false_sharing.c` |
+| **Parallel Compress** | Multi-threaded RLE compression of shared data buffers | `benchmarks/parallel_compress.c` |
+| **Word Count** | Parallel MapReduce-style word frequency counter with shared hash table | `benchmarks/word_count.c` |
+| **Parallel Sort** | Concurrent merge sort over a shared array | `benchmarks/parallel_sort.c` |
+| **DuckDB** | Full DuckDB analytical database engine running TPC-H style queries | `benchmarks/duckdb/` |
+| **True Sharing** | Producer-consumer with explicit shared counter (control — no false sharing expected) | `benchmarks/true_sharing.c` |
+| **Deadlock** | Two threads acquiring two mutexes in opposite order (ABBA pattern) | `benchmarks/deadlock.c` |
+
+### Results Summary
+
+| Benchmark | Total Conflicts | R-W Conflicts | W-W Conflicts | Cache Lines | PCs Involved |
+|-----------|----------------:|--------------:|--------------:|------------:|-------------:|
+| False Sharing | 3,829 | 1,789 | 2,040 | 26 | 33 |
+| Parallel Compress | 17,176 | 16,919 | 257 | 167 | 73 |
+| Word Count | 227,808 | 216,763 | 11,045 | 247 | 112 |
+| Parallel Sort | 208,458 | 180,041 | 28,417 | 208 | 134 |
+| DuckDB | 203,579 | 203,265 | 314 | 378 | 922 |
+
+**Key observations:**
+- The **False Sharing** benchmark produces a concentrated hotspot on a single cache line (`0x7f440`) with ~50/50 R-W and W-W split, exactly as expected for co-located counter increments.
+- **Word Count** and **Parallel Sort** show the highest conflict density, driven by shared hash-table and array boundary regions.
+- **DuckDB** generates 203K+ conflicts spread across 378 cache lines and 922 unique PCs — demonstrating the tool handles real-world database engines at scale.
+- All benchmarks are **R-W dominant** except False Sharing, which confirms that most real programs suffer from read-after-write ping-ponging rather than write-write races.
+
+### Evaluation Figures
+
+Combined benchmark visualizations are in [`paper/figures/`](paper/figures/):
+
+| Figure | Description |
+|--------|-------------|
+| `combined_total_conflicts.png` | Total conflict counts across all benchmarks |
+| `combined_rw_ww_stacked.png` | R-W vs W-W breakdown (stacked bar chart) |
+| `combined_heatmap.png` | Conflict density heatmap by cache line |
+| `combined_radar.png` | Multi-dimensional radar comparison |
+| `combined_scatter_bubble.png` | Cache line vs PC scatter (bubble = severity) |
+| `combined_dashboard_dark.png` | All-in-one dark-themed dashboard |
+| `individual_*.png` | Per-benchmark detailed analysis panels |
+
+To regenerate the plots:
+```bash
+pip install matplotlib numpy
+python3 paper/generate_benchmark_plots.py
+```
 
 ## How It Works (Architecture)
 
