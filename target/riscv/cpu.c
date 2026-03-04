@@ -765,48 +765,33 @@ static void riscv_cpu_reset_hold(Object *obj, ResetType type) {
     env->sb.enabled = false;
   }
 
+  /* Register exit handler once — needed for BOTH buffer mode and
+   * logging-only mode so the false sharing summary gets dumped. */
+  if (env->sb.enabled || env->sb.log_interactions) {
+    static bool exit_handler_registered = false;
+    if (!exit_handler_registered) {
+      atexit(riscv_sb_dump_stats);
+      exit_handler_registered = true;
+    }
+  }
+
   if (env->sb.enabled) {
     if (!env->sb.buffer) {
       env->sb.buffer = g_malloc0(env->sb.capacity * sizeof(SBEntry));
       /* Initialize Statistics Hashmap */
       env->sb.stats =
           g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, g_free);
-
-      /* Register exit handler once */
-      static bool exit_handler_registered = false;
-      if (!exit_handler_registered) {
-        atexit(riscv_sb_dump_stats);
-        /* qemu_add_exit_notifier needs a Notifier*. Let's actually use atexit
-         * for simplicity in this context or create a Notifier */
-        // qemu_add_exit_notifier is cleaner but needs struct.
-        exit_handler_registered = true;
-      }
-
     } else {
-      /* Re-allocate if size changed? For now assume size is constant once set
-       */
       memset(env->sb.buffer, 0, env->sb.capacity * sizeof(SBEntry));
-      /* Clear stats on reset */
       if (env->sb.stats) {
         g_hash_table_remove_all(env->sb.stats);
       }
     }
   }
 
-  /* Initialize Global Log File (once) for logging-only runs too */
-  if (env->sb.log_interactions) {
-    if (!riscv_sb_log_file) {
-      riscv_sb_log_file = fopen("instruction_log.txt", "w");
-      if (riscv_sb_log_file) {
-        /* 1 MB write buffer — reduces write() syscalls by ~250x.
-         * Default stdio is 4-8 KB; each fprintf for every load/store
-         * caused massive I/O overhead.  Fully-buffered mode flushes
-         * only when the buffer fills or the file is closed at exit. */
-        setvbuf(riscv_sb_log_file, NULL, _IOFBF, 1 << 20);
-        fprintf(riscv_sb_log_file, "Core,PC,Op,Address,Value,Hit,Size\n");
-      }
-    }
-  }
+  /* False sharing detection now uses in-memory hashmaps (in op_helper.c)
+   * instead of per-instruction fprintf.  Tables are initialized lazily
+   * on first access via g_once_init_enter — no setup needed here. */
 
   env->sb.head = 0;
   env->sb.tail = 0;
@@ -3102,16 +3087,14 @@ typedef struct {
   uint64_t fwd_count;
 } SBStatsEntry;
 
-static void riscv_sb_dump_stats(void) {
-  /*
-   * We need to access the CPU state. Since we don't have it passed here,
-   * and this is a global dump, we effectively need a way to reach the stats.
-   * BUT, the stats are per-CPU.
-   * For single-core emulation, `first_cpu` works.
-   * For multi-core, we should iterate `cpus`.
-   */
+/* Defined in op_helper.c — dumps the in-memory false sharing summary */
+extern void riscv_fs_dump_summary(void);
 
-  /* Only emit stats if at least one CPU collected any */
+static void riscv_sb_dump_stats(void) {
+  /* Dump aggregated false sharing summary (the main output) */
+  riscv_fs_dump_summary();
+
+  /* Also dump per-CPU store buffer stats to a separate file */
   bool have_stats = false;
   CPUState *cpu;
   CPU_FOREACH(cpu) {
@@ -3148,8 +3131,6 @@ static void riscv_sb_dump_stats(void) {
       while (g_hash_table_iter_next(&iter, &key, &value)) {
         uint64_t addr = *(uint64_t *)key;
         SBStatsEntry *stats = (SBStatsEntry *)value;
-        /* Since these are stores in the store buffer, they are effectively
-         * strictly Modified */
         fprintf(log_file,
                 "CacheLine: 0x%016" PRIx64 " | Writes: %" PRIu64
                 " | FwdHits: %" PRIu64 " | State: Modified (SB)\n",

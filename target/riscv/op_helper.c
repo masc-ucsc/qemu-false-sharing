@@ -270,6 +270,162 @@ typedef struct {
   uint64_t fwd_count;
 } SBStatsEntry;
 
+/* ── In-memory false sharing aggregation ──────────────────────────
+ * Instead of fprintf-ing every load/store to a CSV (millions of rows,
+ * massive I/O), we track two hashmaps:
+ *
+ *  1. fs_last_writer[cache_line] → {core, pc}
+ *     Tracks which core last wrote to each 64-byte cache line.
+ *
+ *  2. fs_pc_stats[pc] → {load_count, store_count, rw_conflicts, ww_conflicts}
+ *     Accumulates per-PC conflict counters.  Only PCs that participate
+ *     in a cross-core conflict get a non-zero conflict count.
+ *
+ *  3. fs_cl_stats[cache_line] → {total, rw, ww, pcs[]}
+ *     Accumulates per-cache-line conflict counters + contributing PCs.
+ *
+ * At exit we dump a compact summary — typically 10-200 rows instead
+ * of millions.
+ */
+
+/* Per-cache-line: who last wrote here? */
+typedef struct {
+  uint64_t core;
+  target_ulong pc;
+} FSLastWriter;
+
+/* Per-PC aggregated stats */
+typedef struct {
+  uint64_t load_count;
+  uint64_t store_count;
+  uint64_t rw_conflicts;   /* this PC was the accessor in a R-W conflict */
+  uint64_t ww_conflicts;   /* this PC was the accessor in a W-W conflict */
+} FSPCStats;
+
+/* Per-cache-line aggregated stats */
+#define FS_CL_MAX_PCS 8
+typedef struct {
+  uint64_t total;
+  uint64_t rw;
+  uint64_t ww;
+  target_ulong pcs[FS_CL_MAX_PCS]; /* first N contributing PCs */
+  int pc_count;
+} FSCLStats;
+
+/* Global hashmaps — in linux-user mode, vCPUs run as real host
+ * pthreads and CAN execute concurrently.  We need a mutex. */
+static GHashTable *fs_last_writer;  /* uint64 cache_line → FSLastWriter */
+static GHashTable *fs_pc_stats;     /* uint64 pc         → FSPCStats   */
+static GHashTable *fs_cl_stats;     /* uint64 cache_line → FSCLStats   */
+static QemuMutex fs_mutex;
+static gsize fs_init_once;
+
+static void fs_tables_init(void) {
+  if (g_once_init_enter(&fs_init_once)) {
+    qemu_mutex_init(&fs_mutex);
+    fs_last_writer = g_hash_table_new_full(
+        g_int64_hash, g_int64_equal, g_free, g_free);
+    fs_pc_stats = g_hash_table_new_full(
+        g_int64_hash, g_int64_equal, g_free, g_free);
+    fs_cl_stats = g_hash_table_new_full(
+        g_int64_hash, g_int64_equal, g_free, g_free);
+    g_once_init_leave(&fs_init_once, 1);
+  }
+}
+
+/* Record a memory access and detect false sharing in-memory.
+ * is_store: true for Store, false for Load/LoadHit.
+ * Returns: nothing — just increments counters.  ~1000x faster than fprintf. */
+static inline void fs_record_access(uint64_t core_id, target_ulong pc,
+                                    target_ulong addr, bool is_store,
+                                    bool check_rw, bool check_ww) {
+  fs_tables_init();  /* no-op after first call (g_once) */
+  uint64_t cache_line = addr & ~UINT64_C(0x3F);
+
+  qemu_mutex_lock(&fs_mutex);
+
+  /* ── Look up who last wrote to this cache line ── */
+  FSLastWriter *prev = g_hash_table_lookup(fs_last_writer, &cache_line);
+
+  const char *conflict_type = NULL;
+  if (prev && prev->core != core_id) {
+    if (is_store && check_ww) {
+      conflict_type = "ww";
+    } else if (!is_store && check_rw) {
+      conflict_type = "rw";
+    }
+  }
+
+  if (conflict_type) {
+    /* ── Update per-PC stats for the *current* accessor ── */
+    FSPCStats *pcs = g_hash_table_lookup(fs_pc_stats, &pc);
+    if (!pcs) {
+      uint64_t *k = g_new(uint64_t, 1);
+      *k = (uint64_t)pc;
+      pcs = g_new0(FSPCStats, 1);
+      g_hash_table_insert(fs_pc_stats, k, pcs);
+    }
+    if (conflict_type[0] == 'r') {
+      pcs->rw_conflicts++;
+    } else {
+      pcs->ww_conflicts++;
+    }
+
+    /* ── Update per-cache-line stats ── */
+    FSCLStats *cls = g_hash_table_lookup(fs_cl_stats, &cache_line);
+    if (!cls) {
+      uint64_t *k = g_new(uint64_t, 1);
+      *k = cache_line;
+      cls = g_new0(FSCLStats, 1);
+      g_hash_table_insert(fs_cl_stats, k, cls);
+    }
+    cls->total++;
+    if (conflict_type[0] == 'r') {
+      cls->rw++;
+    } else {
+      cls->ww++;
+    }
+    /* Track contributing PCs (up to FS_CL_MAX_PCS unique ones) */
+    if (cls->pc_count < FS_CL_MAX_PCS) {
+      bool already = false;
+      for (int i = 0; i < cls->pc_count; i++) {
+        if (cls->pcs[i] == pc) { already = true; break; }
+      }
+      if (!already) {
+        cls->pcs[cls->pc_count++] = pc;
+      }
+    }
+  }
+
+  /* ── Also accumulate load/store counts per-PC (stores only to reduce
+   * lock contention — loads are tracked only on conflict above) ── */
+  if (is_store) {
+    FSPCStats *pcs = g_hash_table_lookup(fs_pc_stats, &pc);
+    if (!pcs) {
+      uint64_t *k = g_new(uint64_t, 1);
+      *k = (uint64_t)pc;
+      pcs = g_new0(FSPCStats, 1);
+      g_hash_table_insert(fs_pc_stats, k, pcs);
+    }
+    pcs->store_count++;
+  }
+
+  /* ── Update last writer on stores ── */
+  if (is_store) {
+    FSLastWriter *lw = g_hash_table_lookup(fs_last_writer, &cache_line);
+    if (!lw) {
+      uint64_t *k = g_new(uint64_t, 1);
+      *k = cache_line;
+      lw = g_new0(FSLastWriter, 1);
+      g_hash_table_insert(fs_last_writer, k, lw);
+    }
+    lw->core = core_id;
+    lw->pc = pc;
+  }
+
+  qemu_mutex_unlock(&fs_mutex);
+}
+
 typedef struct {
   uint64_t owner_core;
   target_ulong owner_pc;
@@ -308,20 +464,6 @@ static inline uint64_t riscv_sb_core_id(CPURISCVState *env) {
 #else
   return (uint64_t)env_cpu(env)->cpu_index;
 #endif
-}
-
-static inline void sb_log_event(CPURISCVState *env, const char *op,
-                                target_ulong pc, target_ulong addr,
-                                target_ulong val, const char *hit,
-                                uint32_t size) {
-  if (!riscv_sb_log_file) {
-    return;
-  }
-  uint64_t core_id = riscv_sb_core_id(env);
-  fprintf(riscv_sb_log_file,
-          "%" PRIu64 ",0x" TARGET_FMT_lx ",%s,0x" TARGET_FMT_lx
-          ",0x" TARGET_FMT_lx ",%s,%u\n",
-          core_id, pc, op, addr, val, hit, size);
 }
 
 static void sb_resolve_pc(char *buf, size_t buflen, target_ulong pc) {
@@ -433,7 +575,8 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
       break;
     }
     if (log_store) {
-      sb_log_event(env, "Store", pc, addr, val, "-", size);
+      fs_record_access(riscv_sb_core_id(env), pc, addr, true,
+                       env->sb.log_read_sharing, env->sb.log_write_sharing);
     }
     return;
   }
@@ -468,7 +611,8 @@ void helper_sb_write(CPURISCVState *env, target_ulong addr, target_ulong val,
   }
 
   if (log_store) {
-    sb_log_event(env, "Store", pc, addr, val, "-", size);
+    fs_record_access(riscv_sb_core_id(env), pc, addr, true,
+                     env->sb.log_read_sharing, env->sb.log_write_sharing);
   }
 }
 
@@ -504,7 +648,10 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
           entry->fwd_count++;
         }
         if (log_load) {
-          sb_log_event(env, "LoadHit", pc, addr, e->data, "1", size);
+          /* LoadHit = forwarded from local SB, still record for
+           * false sharing detection (it's a read to this cache line). */
+          fs_record_access(riscv_sb_core_id(env), pc, addr, false,
+                           env->sb.log_read_sharing, env->sb.log_write_sharing);
         }
         return e->data;
       }
@@ -541,9 +688,127 @@ target_ulong helper_sb_read(CPURISCVState *env, target_ulong addr,
     break;
   }
   if (log_load) {
-    sb_log_event(env, "Load", pc, addr, val, "0", size);
+    fs_record_access(riscv_sb_core_id(env), pc, addr, false,
+                     env->sb.log_read_sharing, env->sb.log_write_sharing);
   }
   return val;
+}
+
+/* ── Dump aggregated false sharing summary to instruction_log.txt ──
+ * Called from riscv_sb_dump_stats (atexit handler in cpu.c).
+ * Writes a compact CSV that the Python script can parse directly. */
+void riscv_fs_dump_summary(void) {
+  if (!fs_cl_stats || g_hash_table_size(fs_cl_stats) == 0) {
+    return;
+  }
+
+  FILE *f = fopen("instruction_log.txt", "w");
+  if (!f) {
+    return;
+  }
+
+  /* ── Section 1: Per-cache-line false sharing candidates ── */
+  fprintf(f, "# False Sharing Summary (in-memory aggregation)\n");
+  fprintf(f, "# Generated by QEMU store buffer instrumentation\n\n");
+
+  fprintf(f, "[cache_lines]\n");
+  fprintf(f, "CacheLine,Total,RW,WW,PCs\n");
+
+  /* Collect and sort by total conflicts descending */
+  GHashTableIter iter;
+  gpointer key, value;
+  uint32_t n_cls = g_hash_table_size(fs_cl_stats);
+  typedef struct { uint64_t cl; FSCLStats *s; } CLPair;
+  CLPair *pairs = g_new(CLPair, n_cls);
+  uint32_t idx = 0;
+
+  g_hash_table_iter_init(&iter, fs_cl_stats);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    pairs[idx].cl = *(uint64_t *)key;
+    pairs[idx].s  = (FSCLStats *)value;
+    idx++;
+  }
+  /* Simple insertion sort (n_cls is typically < 1000) */
+  for (uint32_t i = 1; i < n_cls; i++) {
+    CLPair tmp = pairs[i];
+    int j = (int)i - 1;
+    while (j >= 0 && pairs[j].s->total < tmp.s->total) {
+      pairs[j + 1] = pairs[j];
+      j--;
+    }
+    pairs[j + 1] = tmp;
+  }
+
+  for (uint32_t i = 0; i < n_cls; i++) {
+    FSCLStats *s = pairs[i].s;
+    fprintf(f, "0x%016" PRIx64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64,
+            pairs[i].cl, s->total, s->rw, s->ww);
+    /* Append contributing PCs */
+    for (int p = 0; p < s->pc_count; p++) {
+      fprintf(f, "%s0x" TARGET_FMT_lx, p == 0 ? "," : ";", s->pcs[p]);
+    }
+    fprintf(f, "\n");
+  }
+  g_free(pairs);
+
+  /* ── Section 2: Per-PC hot-spot analysis ── */
+  fprintf(f, "\n[pc_stats]\n");
+  fprintf(f, "PC,Loads,Stores,RW_Conflicts,WW_Conflicts\n");
+
+  uint32_t n_pcs = g_hash_table_size(fs_pc_stats);
+  typedef struct { uint64_t pc; FSPCStats *s; } PCPair;
+  PCPair *pc_pairs = g_new(PCPair, n_pcs);
+  idx = 0;
+
+  g_hash_table_iter_init(&iter, fs_pc_stats);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    pc_pairs[idx].pc = *(uint64_t *)key;
+    pc_pairs[idx].s  = (FSPCStats *)value;
+    idx++;
+  }
+  /* Sort by total conflicts (rw + ww) descending */
+  for (uint32_t i = 1; i < n_pcs; i++) {
+    PCPair tmp = pc_pairs[i];
+    uint64_t tmp_total = tmp.s->rw_conflicts + tmp.s->ww_conflicts;
+    int j = (int)i - 1;
+    while (j >= 0 &&
+           (pc_pairs[j].s->rw_conflicts + pc_pairs[j].s->ww_conflicts) < tmp_total) {
+      pc_pairs[j + 1] = pc_pairs[j];
+      j--;
+    }
+    pc_pairs[j + 1] = tmp;
+  }
+
+  for (uint32_t i = 0; i < n_pcs; i++) {
+    FSPCStats *s = pc_pairs[i].s;
+    /* Only emit PCs that had at least one conflict */
+    if (s->rw_conflicts == 0 && s->ww_conflicts == 0) {
+      continue;
+    }
+    fprintf(f, "0x" TARGET_FMT_lx ",%" PRIu64 ",%" PRIu64 ",%" PRIu64
+            ",%" PRIu64 "\n",
+            (target_ulong)pc_pairs[i].pc,
+            s->load_count, s->store_count,
+            s->rw_conflicts, s->ww_conflicts);
+  }
+  g_free(pc_pairs);
+
+  /* ── Section 3: Summary line ── */
+  uint64_t total_rw = 0, total_ww = 0;
+  g_hash_table_iter_init(&iter, fs_cl_stats);
+  while (g_hash_table_iter_next(&iter, &key, &value)) {
+    FSCLStats *s = (FSCLStats *)value;
+    total_rw += s->rw;
+    total_ww += s->ww;
+  }
+  fprintf(f, "\n[summary]\n");
+  fprintf(f, "total_conflicts=%" PRIu64 "\n", total_rw + total_ww);
+  fprintf(f, "rw_conflicts=%" PRIu64 "\n", total_rw);
+  fprintf(f, "ww_conflicts=%" PRIu64 "\n", total_ww);
+  fprintf(f, "unique_cache_lines=%u\n", n_cls);
+  fprintf(f, "unique_pcs=%u\n", n_pcs);
+
+  fclose(f);
 }
 
 void helper_sb_amo_lock(CPURISCVState *env, target_ulong addr,

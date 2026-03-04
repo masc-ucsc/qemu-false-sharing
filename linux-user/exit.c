@@ -27,11 +27,19 @@
 extern void __gcov_dump(void);
 #endif
 
+/* Defined in target/riscv/op_helper.c — dump false sharing summary */
+extern void riscv_fs_dump_summary(void);
+
 void preexit_cleanup(CPUArchState *env, int code)
 {
 #ifdef CONFIG_GCOV
         __gcov_dump();
 #endif
+        /* Dump aggregated false sharing stats before exit.
+         * Must happen here because linux-user uses _exit() which
+         * bypasses atexit handlers. */
+        riscv_fs_dump_summary();
+
         gdb_exit(code);
         qemu_plugin_user_exit();
         perf_exit();
